@@ -16,7 +16,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ catNames, on
             <img
               src="/assets/cat-walker.png"
               alt=""
-              className="w-full h-full object-contain drop-shadow-md animate-cat-idle"
+              className="w-full h-full object-contain drop-shadow-md"
             />
           </div>
           <h1

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  RotateCw,
   Check,
   AlertCircle,
   Clock,
@@ -111,7 +110,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   const isRoseGold = theme === 'rosegold_bloom';
   const walkerName = catNames.walker?.trim() || 'Mimi';
 
-  const [isBackView, setIsBackView] = useState(false);
   const [poppingAnim, setPoppingAnim] = useState<PopAnimationState | null>(null);
   const [pressingIndex, setPressingIndex] = useState<number | null>(null);
   const [selectedPill, setSelectedPill] = useState<{
@@ -185,10 +183,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       clearRoamTimers();
     };
   }, []);
-
-  useEffect(() => {
-    if (isCatBowl && isBackView) setIsBackView(false);
-  }, [isCatBowl, isBackView]);
 
   // Smooth eating frame swap ONLY while actively eating
   useEffect(() => {
@@ -878,24 +872,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 />
               </div>
             )
-          ) : isBackView ? (
-            <div
-              className="relative w-full h-full rounded-full flex flex-col items-center justify-center border border-slate-400/60 shadow-inner"
-              style={{
-                background: isRoseGold
-                  ? 'radial-gradient(circle at 35% 30%, rgba(255,241,242,0.85), rgba(244,182,194,0.8) 60%, rgba(190,120,138,0.85) 100%)'
-                  : 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.65), rgba(203,213,225,0.75) 60%, rgba(148,163,184,0.85) 100%)',
-              }}
-            >
-              <span className="text-[10px] font-bold text-slate-700 leading-none">
-                {pill.dayIndex + 1}
-              </span>
-              {pill.isPlacebo && (
-                <span className="text-[7px] uppercase tracking-wider font-semibold text-violet-700 mt-0.5">
-                  PL
-                </span>
-              )}
-            </div>
           ) : (
             <div className="relative w-full h-full rounded-full flex items-center justify-center">
               <span className="absolute inset-0 rounded-full bg-slate-900/18 blur-[1.5px] translate-y-[1.5px]" />
@@ -993,8 +969,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     ? 'blister-catbowl-surface border-amber-200/80'
     : isRoseGold
     ? 'blister-rosegold-surface border-rose-200/90'
-    : isBackView
-    ? 'blister-back-surface border-white/80'
     : 'blister-card-surface border-white/80';
 
   const schemaTag = `${config.activePills}${
@@ -1047,33 +1021,13 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               {config.brandName.trim() ? `${config.brandName.trim()} • ${schemaTag}` : schemaTag}
             </span>
 
-            <div className="flex items-center gap-2">
-              <span
-                className={
-                  isCatBowl ? 'text-amber-900' : isRoseGold ? 'text-rose-900' : 'text-slate-600'
-                }
-              >
-                {poppedCount}/{totalPhysicalPills}
-              </span>
-              {!isCatBowl && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic(hapticsEnabled, 'light');
-                    setIsBackView((v) => !v);
-                  }}
-                  className="w-6 h-6 rounded-full bg-white/60 hover:bg-white/90 text-slate-600 flex items-center justify-center active:scale-95 transition"
-                  title="Rückseite"
-                  aria-label="Blister umdrehen"
-                >
-                  <RotateCw
-                    className={`w-3 h-3 transition-transform duration-300 ${
-                      isBackView ? 'rotate-180 app-accent-text' : ''
-                    }`}
-                  />
-                </button>
-              )}
-            </div>
+            <span
+              className={
+                isCatBowl ? 'text-amber-900' : isRoseGold ? 'text-rose-900' : 'text-slate-600'
+              }
+            >
+              {poppedCount}/{totalPhysicalPills}
+            </span>
           </div>
 
           {!isCatBowl && (
