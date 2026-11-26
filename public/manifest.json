@@ -1,0 +1,19 @@
+{
+  "name": "Lunea – Pillen- & Zyklustracker",
+  "short_name": "Lunea",
+  "description": "Dein realistischer interaktiver Pillenblister, Zykluskalender & Pillenwecker.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF6F5",
+  "theme_color": "#D94E6A",
+  "orientation": "portrait",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

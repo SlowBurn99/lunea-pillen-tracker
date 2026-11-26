@@ -1,0 +1,61 @@
+workflows:
+  lunea-ios-unsigned:
+    name: Lunea iOS Unsigned IPA (Sideloading)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies & build web app
+        script: |
+          npm ci
+          npm run build
+          npx cap sync ios
+      - name: Install CocoaPods
+        script: |
+          cd ios/App && pod install
+      - name: Build Unsigned iOS .app & package .ipa
+        script: |
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+          mkdir -p ../../artifacts/Payload
+          cp -r build/Build/Products/Release-iphoneos/App.app ../../artifacts/Payload/
+          cd ../../artifacts
+          zip -qry Lunea-iOS-unsigned.ipa Payload
+    artifacts:
+      - artifacts/Lunea-iOS-unsigned.ipa
+
+  lunea-android-apk:
+    name: Lunea Android APK
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      node: 20
+      java: 21
+    scripts:
+      - name: Install npm dependencies & build web app
+        script: |
+          npm ci
+          npm run build
+          npx cap sync android
+      - name: Build Android Debug APK
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          mkdir -p ../artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/Lunea-Android.apk
+    artifacts:
+      - artifacts/Lunea-Android.apk

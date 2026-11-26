@@ -1,0 +1,334 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    --font-serif: 'Playfair Display', Georgia, serif;
+  }
+
+  html,
+  body {
+    font-family: var(--font-sans);
+    background-color: #faf6f5;
+    color: #2b1f24;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+}
+
+/* Realistic metallic aluminum blister pack styling */
+.blister-card-surface {
+  background-color: #d6dbe2;
+  background-image:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.08) 32%,
+      rgba(148, 163, 184, 0.16) 58%,
+      rgba(255, 255, 255, 0.42) 82%,
+      rgba(100, 116, 139, 0.18) 100%
+    ),
+    url('/assets/foil-texture.jpg');
+  background-size: 100% 100%, 240px 240px;
+  background-blend-mode: overlay, normal;
+  box-shadow:
+    0 20px 44px -14px rgba(55, 36, 46, 0.28),
+    0 6px 14px -4px rgba(55, 36, 46, 0.16),
+    inset 0 2px 2px rgba(255, 255, 255, 0.85),
+    inset 0 -3px 4px rgba(71, 85, 105, 0.35),
+    inset 2px 0 3px rgba(255, 255, 255, 0.5),
+    inset -2px 0 3px rgba(71, 85, 105, 0.25);
+}
+
+.blister-back-surface {
+  background-color: #cdd3db;
+  background-image:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.45) 0%,
+      rgba(148, 163, 184, 0.12) 45%,
+      rgba(255, 255, 255, 0.35) 75%,
+      rgba(71, 85, 105, 0.2) 100%
+    ),
+    url('/assets/foil-texture.jpg');
+  background-size: 100% 100%, 180px 180px;
+  background-blend-mode: soft-light, normal;
+  box-shadow:
+    0 20px 44px -14px rgba(55, 36, 46, 0.28),
+    0 6px 14px -4px rgba(55, 36, 46, 0.16),
+    inset 0 2px 2px rgba(255, 255, 255, 0.78),
+    inset 0 -3px 5px rgba(51, 65, 85, 0.38);
+}
+
+/* Cozy Cat-Café Feeding Mat surface for Cat Bowl Blister */
+.blister-catbowl-surface {
+  background-color: #fff6ed;
+  background-image:
+    radial-gradient(circle at 18% 15%, rgba(253, 186, 116, 0.22), transparent 46%),
+    radial-gradient(circle at 82% 88%, rgba(249, 168, 212, 0.24), transparent 50%),
+    repeating-linear-gradient(
+      45deg,
+      rgba(217, 119, 6, 0.03) 0px,
+      rgba(217, 119, 6, 0.03) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+  box-shadow:
+    0 20px 44px -14px rgba(120, 68, 46, 0.22),
+    0 6px 14px -4px rgba(120, 68, 46, 0.12),
+    inset 0 2px 3px rgba(255, 255, 255, 0.92),
+    inset 0 -3px 5px rgba(180, 130, 100, 0.2);
+}
+
+/* Rosegold Blossom Foil surface */
+.blister-rosegold-surface {
+  background-color: #ecc6c8;
+  background-image:
+    linear-gradient(
+      135deg,
+      rgba(255, 245, 246, 0.65) 0%,
+      rgba(244, 182, 194, 0.28) 38%,
+      rgba(214, 140, 154, 0.3) 66%,
+      rgba(255, 241, 242, 0.58) 100%
+    ),
+    url('/assets/foil-texture.jpg');
+  background-size: 100% 100%, 220px 220px;
+  background-blend-mode: multiply, normal;
+  box-shadow:
+    0 20px 44px -14px rgba(136, 49, 76, 0.28),
+    0 6px 14px -4px rgba(136, 49, 76, 0.14),
+    inset 0 2px 2px rgba(255, 255, 255, 0.88),
+    inset 0 -3px 4px rgba(159, 68, 92, 0.3);
+}
+
+@keyframes catPeekPop {
+  0% {
+    transform: scale(0.25) translateY(14px);
+    opacity: 0;
+  }
+  58% {
+    transform: scale(1.16) translateY(-4px);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(0.96) translateY(1px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes catTrot {
+  0%, 100% {
+    transform: translateY(0px) rotate(-4deg) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) rotate(4deg) scale(1.04);
+  }
+}
+
+@keyframes catMunch {
+  0%, 100% {
+    transform: translateY(0px) scale(1, 1);
+  }
+  30% {
+    transform: translateY(4px) scale(1.08, 0.92);
+  }
+  60% {
+    transform: translateY(-2px) scale(0.96, 1.05);
+  }
+}
+
+@keyframes catIdleBreathe {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.02);
+  }
+}
+
+@keyframes heartFloat {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-26px) scale(1.15);
+    opacity: 0;
+  }
+}
+
+.animate-cat-peek {
+  animation: catPeekPop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-cat-trot {
+  animation: catTrot 0.24s ease-in-out infinite;
+}
+
+.animate-cat-munch {
+  animation: catMunch 0.28s ease-in-out infinite;
+}
+
+.animate-cat-idle {
+  animation: catIdleBreathe 2.6s ease-in-out infinite;
+}
+
+.animate-heart-float {
+  animation: heartFloat 0.9s ease-out forwards;
+}
+
+/* Torn foil cavity seamless radial mask */
+.torn-foil-mask {
+  -webkit-mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 52%, rgba(0, 0, 0, 0.85) 64%, rgba(0, 0, 0, 0) 76%);
+  mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 52%, rgba(0, 0, 0, 0.85) 64%, rgba(0, 0, 0, 0) 76%);
+}
+
+/* 3D Clear PVC blister dome */
+.pvc-dome {
+  background: radial-gradient(
+    circle at 32% 28%,
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(255, 255, 255, 0.25) 26%,
+    rgba(255, 255, 255, 0.04) 55%,
+    rgba(100, 116, 139, 0.16) 84%,
+    rgba(30, 41, 59, 0.28) 100%
+  );
+  box-shadow:
+    0 4px 8px rgba(15, 23, 42, 0.24),
+    0 1px 2px rgba(15, 23, 42, 0.2),
+    inset 0 2px 4px rgba(255, 255, 255, 0.92),
+    inset 0 -3px 5px rgba(51, 65, 85, 0.22);
+}
+
+/* Pill pop out animation */
+@keyframes pillPopOut {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  22% {
+    transform: translate(-50%, -68%) scale(1.22) rotate(-14deg);
+    opacity: 1;
+  }
+  60% {
+    transform: translate(-38%, -165%) scale(1.32) rotate(24deg);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-20%, -250%) scale(0.7) rotate(68deg);
+    opacity: 0;
+  }
+}
+
+@keyframes foilBurst {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.95;
+  }
+  55% {
+    transform: scale(1.18);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.38);
+    opacity: 0;
+  }
+}
+
+@keyframes cavityReveal {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes sparkleFly {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes todayPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(217, 78, 106, 0.88), 0 0 0 6px rgba(217, 78, 106, 0.24);
+  }
+  50% {
+    box-shadow: 0 0 0 2.5px rgba(217, 78, 106, 1), 0 0 0 11px rgba(217, 78, 106, 0.05);
+  }
+}
+
+@keyframes alarmRing {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(10deg); }
+  60% { transform: rotate(-8deg); }
+  75% { transform: rotate(4deg); }
+}
+
+.animate-pill-pop {
+  animation: pillPopOut 0.68s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-foil-burst {
+  animation: foilBurst 0.42s ease-out forwards;
+}
+
+.animate-cavity-reveal {
+  animation: cavityReveal 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-sparkle {
+  animation: sparkleFly 0.55s ease-out forwards;
+}
+
+.animate-today-pulse {
+  animation: todayPulse 2.1s ease-in-out infinite;
+}
+
+.animate-alarm-ring {
+  animation: alarmRing 0.85s ease-in-out infinite;
+}
+
+/* 3D card perspective */
+.perspective-1200 {
+  perspective: 1200px;
+}
+
+/* Custom scrollbar hidden on mobile strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area padding for iOS */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+}
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 8px);
+}

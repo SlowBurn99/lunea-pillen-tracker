@@ -1,0 +1,109 @@
+name: Build Lunea (Android APK & iOS IPA)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install dependencies & build web bundle
+        env:
+          CI: true
+        run: |
+          npm ci
+          npm run build
+          npx cap telemetry off || true
+          npx cap sync android
+
+      - name: Build Android APK (Debug-signed, direkt installierbar)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Prepare APK artifact
+        run: |
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Lunea-Android.apk
+
+      - name: Upload Lunea-Android.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lunea-Android-APK
+          path: artifacts/Lunea-Android.apk
+          retention-days: 30
+
+  build-ios-unsigned:
+    name: Build iOS IPA (Unsigned fuer AltStore / Sideloadly)
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies & sync Capacitor iOS
+        env:
+          CI: true
+        run: |
+          npm ci
+          npm run build
+          npx cap telemetry off || true
+          npx cap sync ios
+
+      - name: Install CocoaPods
+        working-directory: ios/App
+        run: pod install --repo-update
+
+      - name: Build Unsigned iOS App (.app)
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            build
+
+      - name: Package Unsigned .ipa
+        run: |
+          mkdir -p artifacts/Payload
+          cp -r ios/App/build/Build/Products/Release-iphoneos/App.app artifacts/Payload/
+          cd artifacts
+          zip -qry Lunea-iOS-unsigned.ipa Payload
+
+      - name: Upload Lunea-iOS-unsigned.ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lunea-iOS-IPA
+          path: artifacts/Lunea-iOS-unsigned.ipa
+          retention-days: 30
