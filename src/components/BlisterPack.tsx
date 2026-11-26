@@ -59,31 +59,31 @@ type BowlEatStage = 'full' | 'half' | 'empty';
 const ROTATION_SEEDS = [12, 74, 138, 196, 251, 314, 43, 109, 172, 229, 287, 342];
 
 const WALK_FRAMES = [
-  '/assets/cat-walk-0.png',
-  '/assets/cat-walk-1.png',
-  '/assets/cat-walk-2.png',
-  '/assets/cat-walk-3.png',
+  './assets/cat-walk-0.png',
+  './assets/cat-walk-1.png',
+  './assets/cat-walk-2.png',
+  './assets/cat-walk-3.png',
 ];
 
 const PRELOAD_SPRITES = [
-  '/assets/cat-walker.png',
+  './assets/cat-walker.png',
   ...WALK_FRAMES,
-  '/assets/cat-eat-1.png',
-  '/assets/cat-eat-2.png',
-  '/assets/cat-sniff.png',
-  '/assets/cat-sleep-1.png',
-  '/assets/cat-sleep-2.png',
-  '/assets/cat-bowl-full.png',
-  '/assets/cat-bowl-half.png',
-  '/assets/cat-bowl-empty.png',
-  '/assets/cat-peek-0.png',
-  '/assets/cat-peek-1.png',
-  '/assets/cat-peek-2.png',
-  '/assets/cat-peek-3.png',
-  '/assets/cat-peek-happy-0.png',
-  '/assets/cat-peek-happy-1.png',
-  '/assets/cat-peek-happy-2.png',
-  '/assets/cat-peek-happy-3.png',
+  './assets/cat-eat-1.png',
+  './assets/cat-eat-2.png',
+  './assets/cat-sniff.png',
+  './assets/cat-sleep-1.png',
+  './assets/cat-sleep-2.png',
+  './assets/cat-bowl-full.png',
+  './assets/cat-bowl-half.png',
+  './assets/cat-bowl-empty.png',
+  './assets/cat-peek-0.png',
+  './assets/cat-peek-1.png',
+  './assets/cat-peek-2.png',
+  './assets/cat-peek-3.png',
+  './assets/cat-peek-happy-0.png',
+  './assets/cat-peek-happy-1.png',
+  './assets/cat-peek-happy-2.png',
+  './assets/cat-peek-happy-3.png',
 ];
 
 export function getPeekCatName(dayIndex: number, catNames: CatNames): string {
@@ -647,17 +647,17 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       ? WALK_FRAMES[walkFrameIdx]
       : catState === 'eating'
       ? eatFrameIdx === 0
-        ? '/assets/cat-eat-1.png'
-        : '/assets/cat-eat-2.png'
+        ? './assets/cat-eat-1.png'
+        : './assets/cat-eat-2.png'
       : catState === 'happy'
-      ? '/assets/cat-eat-2.png'
+      ? './assets/cat-eat-2.png'
       : catState === 'sniffing'
-      ? '/assets/cat-sniff.png'
+      ? './assets/cat-sniff.png'
       : catState === 'sleeping'
       ? sleepBreathIdx === 0
-        ? '/assets/cat-sleep-1.png'
-        : '/assets/cat-sleep-2.png'
-      : '/assets/cat-walker.png';
+        ? './assets/cat-sleep-1.png'
+        : './assets/cat-sleep-2.png'
+      : './assets/cat-walker.png';
 
   const renderPocket = (pill: (typeof pills)[number]) => {
     const status = pill.entry?.status;
@@ -681,12 +681,12 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
         : 'w-14 h-14 sm:w-15 sm:h-15';
 
     const bowlSrc = isPopped
-      ? '/assets/cat-bowl-empty.png'
+      ? './assets/cat-bowl-empty.png'
       : isActiveEatBowl && eatingBowlStage === 'half'
-      ? '/assets/cat-bowl-half.png'
+      ? './assets/cat-bowl-half.png'
       : isActiveEatBowl && eatingBowlStage === 'empty'
-      ? '/assets/cat-bowl-empty.png'
-      : '/assets/cat-bowl-full.png';
+      ? './assets/cat-bowl-empty.png'
+      : './assets/cat-bowl-full.png';
 
     return (
       <div key={pill.dayIndex} className="relative flex flex-col items-center">
@@ -803,8 +803,8 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 <img
                   src={
                     isKittenHappy
-                      ? `/assets/cat-peek-happy-${catVariantIdx}.png`
-                      : `/assets/cat-peek-${catVariantIdx}.png`
+                      ? `./assets/cat-peek-happy-${catVariantIdx}.png`
+                      : `./assets/cat-peek-${catVariantIdx}.png`
                   }
                   alt=""
                   draggable={false}
@@ -857,7 +857,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 }`}
               >
                 <img
-                  src="/assets/torn-foil-cavity.jpg"
+                  src="./assets/torn-foil-cavity.jpg"
                   alt=""
                   draggable={false}
                   className="w-[146%] h-[146%] max-w-none absolute top-1/2 left-1/2 object-cover torn-foil-mask pointer-events-none"
@@ -1288,7 +1288,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                   (selectedPill.entry?.status === 'taken' ||
                     selectedPill.entry?.status === 'late') && (
                     <img
-                      src={`/assets/cat-peek-happy-${selectedPill.dayIndex % 4}.png`}
+                      src={`./assets/cat-peek-happy-${selectedPill.dayIndex % 4}.png`}
                       alt=""
                       className="w-11 h-11 rounded-full object-cover border border-rose-100"
                     />

@@ -227,7 +227,7 @@
       rgba(255, 255, 255, 0.42) 82%,
       rgba(100, 116, 139, 0.18) 100%
     ),
-    url('/assets/foil-texture.jpg');
+    url('./assets/foil-texture.jpg');
   background-size: 100% 100%, 240px 240px;
   background-blend-mode: overlay, normal;
   box-shadow:
@@ -249,7 +249,7 @@
       rgba(255, 255, 255, 0.35) 75%,
       rgba(71, 85, 105, 0.2) 100%
     ),
-    url('/assets/foil-texture.jpg');
+    url('./assets/foil-texture.jpg');
   background-size: 100% 100%, 180px 180px;
   background-blend-mode: soft-light, normal;
   box-shadow:
@@ -290,7 +290,7 @@
       rgba(214, 140, 154, 0.3) 66%,
       rgba(255, 241, 242, 0.58) 100%
     ),
-    url('/assets/foil-texture.jpg');
+    url('./assets/foil-texture.jpg');
   background-size: 100% 100%, 220px 220px;
   background-blend-mode: multiply, normal;
   box-shadow:

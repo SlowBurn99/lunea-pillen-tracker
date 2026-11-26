@@ -30,7 +30,7 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({ avatar, size = 40,
         style={style}
       >
         <img
-          src={`/assets/cat-peek-${idx}.png`}
+          src={`./assets/cat-peek-${idx}.png`}
           alt=""
           draggable={false}
           className="w-full h-full object-cover scale-[1.35]"

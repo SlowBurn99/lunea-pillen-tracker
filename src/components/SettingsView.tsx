@@ -74,11 +74,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const catList: Array<{ key: keyof CatNames; img: string; placeholder: string }> = [
-    { key: 'walker', img: '/assets/cat-walker.png', placeholder: 'Napf-Katze' },
-    { key: 'peek0', img: '/assets/cat-peek-0.png', placeholder: 'Kätzchen 1' },
-    { key: 'peek1', img: '/assets/cat-peek-1.png', placeholder: 'Kätzchen 2' },
-    { key: 'peek2', img: '/assets/cat-peek-2.png', placeholder: 'Kätzchen 3' },
-    { key: 'peek3', img: '/assets/cat-peek-3.png', placeholder: 'Kätzchen 4' },
+    { key: 'walker', img: './assets/cat-walker.png', placeholder: 'Napf-Katze' },
+    { key: 'peek0', img: './assets/cat-peek-0.png', placeholder: 'Kätzchen 1' },
+    { key: 'peek1', img: './assets/cat-peek-1.png', placeholder: 'Kätzchen 2' },
+    { key: 'peek2', img: './assets/cat-peek-2.png', placeholder: 'Kätzchen 3' },
+    { key: 'peek3', img: './assets/cat-peek-3.png', placeholder: 'Kätzchen 4' },
   ];
 
   return (

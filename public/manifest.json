@@ -2,7 +2,7 @@
   "name": "Pille",
   "short_name": "Pille",
   "description": "Dein interaktiver Pillenblister, Zykluskalender & Pillenwecker.",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#FAF6F5",
   "theme_color": "#D94E6A",
@@ -10,7 +10,7 @@
   "lang": "de",
   "icons": [
     {
-      "src": "/icon.png",
+      "src": "./icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
