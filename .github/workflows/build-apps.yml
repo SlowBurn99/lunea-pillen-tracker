@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-android:
     name: Build Android APK
@@ -107,3 +110,15 @@ jobs:
           name: Lunea-iOS-IPA
           path: artifacts/Lunea-iOS-unsigned.ipa
           retention-days: 30
+
+      - name: Publish iOS IPA to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest-build >/dev/null 2>&1; then
+            gh release upload latest-build artifacts/Lunea-iOS-unsigned.ipa --clobber
+          else
+            gh release create latest-build artifacts/Lunea-iOS-unsigned.ipa \
+              --title "Lunea Build" \
+              --notes "Automatischer Build (Android APK & unsignierte iOS IPA fuer Sideloading)"
+          fi
