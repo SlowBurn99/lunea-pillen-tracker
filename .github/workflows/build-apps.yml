@@ -54,7 +54,7 @@ jobs:
 
   build-ios-unsigned:
     name: Build iOS IPA (Unsigned fuer AltStore / Sideloadly)
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
