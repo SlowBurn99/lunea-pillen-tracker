@@ -29,8 +29,11 @@ import {
   getTodayIso,
 } from './utils/date';
 import {
+  checkNotificationPermission,
   fireBrowserNotification,
   getAlarmNotificationText,
+  requestNotificationPermission,
+  scheduleNativeSnooze,
   syncNativeAlarms,
 } from './utils/notifications';
 import { playAlarmSound, playBlisterPopSound, triggerHaptic } from './utils/sound';
@@ -80,17 +83,6 @@ export function App() {
     }
   }, [state.settings.appColor]);
 
-  // Sync Capacitor native notifications whenever alarm config changes
-  useEffect(() => {
-    syncNativeAlarms(state.alarm);
-  }, [state.alarm]);
-
-  // Live clock tick every 15s for countdown & active in-app alarm scheduler
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 15000);
-    return () => window.clearInterval(id);
-  }, []);
-
   const today = getTodayIso();
   const totalPhysicalPills = state.blister.activePills + state.blister.placeboPills;
   const totalCycleDays = totalPhysicalPills + state.blister.pauseDays;
@@ -100,6 +92,28 @@ export function App() {
     cycleDayIndex >= state.blister.activePills && cycleDayIndex < totalPhysicalPills;
   const todayEntry = state.entries[today];
   const isTodayTaken = todayEntry?.status === 'taken' || todayEntry?.status === 'late';
+
+  // Request native notification permission once after onboarding so lockscreen alarms work immediately
+  useEffect(() => {
+    if (!state.profile || !state.alarm.enabled) return;
+    checkNotificationPermission().then(async (st) => {
+      if (st === 'default') {
+        await requestNotificationPermission();
+      }
+      await syncNativeAlarms(state.alarm, isTodayTaken);
+    });
+  }, [Boolean(state.profile)]);
+
+  // Sync Capacitor native notifications whenever alarm config or today's intake status changes
+  useEffect(() => {
+    syncNativeAlarms(state.alarm, isTodayTaken);
+  }, [state.alarm, isTodayTaken]);
+
+  // Live clock tick every 15s for countdown & active in-app alarm scheduler
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 15000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Trigger live web alarm / snooze when due
   useEffect(() => {
@@ -357,7 +371,8 @@ export function App() {
   const handleAlarmSnooze = () => {
     setAlarmModalOpen(false);
     setSnoozeUntil(Date.now() + state.alarm.snoozeMinutes * 60 * 1000);
-    showToast(`Wecker schlummert für ${state.alarm.snoozeMinutes} Minuten ⏰`);
+    scheduleNativeSnooze(state.alarm);
+    showToast(`Wecker schlummert für ${state.alarm.snoozeMinutes} Minuten`);
   };
 
   if (state.settings.pinEnabled && !unlocked) {
@@ -560,6 +575,7 @@ export function App() {
                 setState((prev) => ({ ...prev, alarm: updatedAlarm }))
               }
               onTriggerTestAlarm={handleTriggerTestAlarm}
+              onNotifyToast={showToast}
             />
           )}
 

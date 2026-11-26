@@ -11,14 +11,17 @@ import {
   Play,
   Package,
   CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import type { AlarmConfig, AlarmSoundId, DiscreetMode } from '../types';
 import { DISCREET_MESSAGES } from '../data/presets';
 import { getTimeUntilAlarm } from '../utils/date';
 import { playAlarmSound } from '../utils/sound';
 import {
+  checkNotificationPermission,
   getWebNotificationPermission,
   requestNotificationPermission,
+  scheduleLockscreenTestNotification,
   type NotificationPermissionState,
 } from '../utils/notifications';
 
@@ -27,6 +30,7 @@ interface AlarmViewProps {
   soundEnabled: boolean;
   onChange: (updated: AlarmConfig) => void;
   onTriggerTestAlarm: () => void;
+  onNotifyToast?: (msg: string) => void;
 }
 
 export const AlarmView: React.FC<AlarmViewProps> = ({
@@ -34,12 +38,25 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
   soundEnabled,
   onChange,
   onTriggerTestAlarm,
+  onNotifyToast,
 }) => {
   const [countdown, setCountdown] = useState(() => getTimeUntilAlarm(alarm.time));
   const [permState, setPermState] = useState<NotificationPermissionState>(() =>
     getWebNotificationPermission()
   );
   const [newExtraTime, setNewExtraTime] = useState('21:00');
+  const [lockTestPending, setLockTestPending] = useState(false);
+
+  // Check real native Android/iOS or Web permission asynchronously on mount
+  useEffect(() => {
+    let mounted = true;
+    checkNotificationPermission().then((st) => {
+      if (mounted) setPermState(st);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const tick = () => setCountdown(getTimeUntilAlarm(alarm.time));
@@ -51,6 +68,23 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
   const handleRequestPermission = async () => {
     const res = await requestNotificationPermission();
     setPermState(res);
+    if (res === 'granted') {
+      onNotifyToast?.('Benachrichtigungen aktiviert ✓');
+    }
+  };
+
+  const handleLockscreenTest = async () => {
+    const res = await scheduleLockscreenTestNotification(alarm, 5);
+    const updatedPerm = await checkNotificationPermission();
+    setPermState(updatedPerm);
+
+    if (res.ok) {
+      setLockTestPending(true);
+      onNotifyToast?.('Wecker klingelt in 5 Sek. – Handy jetzt sperren!');
+      window.setTimeout(() => setLockTestPending(false), 5500);
+    } else if (res.reason) {
+      onNotifyToast?.(res.reason);
+    }
   };
 
   const addExtraAlarm = () => {
@@ -73,67 +107,87 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
   const previewNotification =
     alarm.discreetMode === 'custom'
       ? {
-          title: 'Lunea Erinnerung',
-          body: alarm.customMessage || 'Dein eigener diskreter Text erscheint hier.',
+          title: 'Pille',
+          body: alarm.customMessage || 'Dein eigener diskreter Text',
         }
       : DISCREET_MESSAGES[alarm.discreetMode];
 
   return (
-    <div className="space-y-4">
-      {/* Hero Alarm Clock Card */}
+    <div className="space-y-3.5">
+      {/* Hero Alarm Clock Card — clean stacked layout, zero mobile overflow */}
       <div className="rounded-3xl app-accent-gradient text-white p-5 shadow-lg relative overflow-hidden">
         <div className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
 
-        <div className="flex items-start justify-between relative z-10">
-          <div>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-rose-100">
-              <BellRing className="w-3.5 h-3.5" />
-              Täglicher Pillenwecker
-            </span>
-            <div className="mt-2 flex items-baseline gap-2">
-              <input
-                type="time"
-                value={alarm.time}
-                onChange={(e) => onChange({ ...alarm, time: e.target.value })}
-                className="text-4xl font-extrabold tracking-tight bg-white/15 hover:bg-white/20 rounded-2xl px-3 py-1.5 text-white border border-white/25 focus:outline-none focus:ring-2 focus:ring-white/60 cursor-pointer"
-              />
-            </div>
-          </div>
+        {/* Top Row: Label + Toggle */}
+        <div className="flex items-center justify-between relative z-10">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white/90">
+            <BellRing className="w-4 h-4" />
+            Täglicher Wecker
+          </span>
 
           <button
             type="button"
-            onClick={() => onChange({ ...alarm, enabled: !alarm.enabled })}
-            className={`w-14 h-8 rounded-full p-1 transition-colors flex items-center ${
+            onClick={async () => {
+              const nextEnabled = !alarm.enabled;
+              onChange({ ...alarm, enabled: nextEnabled });
+              if (nextEnabled && permState !== 'granted') {
+                const res = await requestNotificationPermission();
+                setPermState(res);
+              }
+            }}
+            className={`w-13 h-7 rounded-full p-0.5 transition-colors flex items-center shrink-0 ${
               alarm.enabled ? 'bg-emerald-400 justify-end' : 'bg-white/25 justify-start'
             }`}
-            aria-label="Pillenwecker ein- oder ausschalten"
+            aria-label="Wecker ein- oder ausschalten"
           >
             <span className="w-6 h-6 rounded-full bg-white shadow-md" />
           </button>
         </div>
 
-        <div className="mt-4 pt-3.5 border-t border-white/20 flex items-center justify-between text-xs relative z-10">
-          <span className="flex items-center gap-1.5 text-rose-50 font-medium">
+        {/* Center Time Picker */}
+        <div className="mt-4 flex flex-col items-center relative z-10">
+          <input
+            type="time"
+            value={alarm.time}
+            onChange={(e) => {
+              if (e.target.value) onChange({ ...alarm, time: e.target.value });
+            }}
+            aria-label="Weckzeit"
+            className="w-full max-w-[210px] text-center text-4xl font-extrabold tracking-tight bg-white/15 hover:bg-white/20 rounded-2xl px-4 py-2.5 text-white border border-white/25 focus:outline-none focus:ring-2 focus:ring-white/60 cursor-pointer"
+          />
+          <span className="mt-2.5 inline-flex items-center gap-1.5 text-xs text-white/90 font-medium">
             <Clock className="w-3.5 h-3.5" />
             {alarm.enabled
-              ? `Nächster Wecker in ${countdown.hours} Std. ${countdown.minutes} Min.`
-              : 'Wecker aktuell pausiert'}
+              ? `In ${countdown.hours} Std. ${countdown.minutes} Min.`
+              : 'Wecker pausiert'}
           </span>
+        </div>
 
+        {/* Two Clean Test Buttons */}
+        <div className="mt-4 pt-3.5 border-t border-white/20 grid grid-cols-2 gap-2 relative z-10">
           <button
             type="button"
             onClick={onTriggerTestAlarm}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-rose-700 text-xs font-bold shadow-sm hover:bg-rose-50 active:scale-95 transition"
+            className="inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white app-accent-text text-xs font-bold shadow-sm active:scale-95 transition"
           >
-            <Play className="w-3 h-3 fill-current" />
-            Wecker testen
+            <Play className="w-3.5 h-3.5 fill-current" />
+            Sofort testen
+          </button>
+          <button
+            type="button"
+            onClick={handleLockscreenTest}
+            disabled={lockTestPending}
+            className="inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white/18 hover:bg-white/25 text-white border border-white/25 text-xs font-bold active:scale-95 transition disabled:opacity-70"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            {lockTestPending ? 'Klingelt in 5s…' : 'Sperrbild (5s)'}
           </button>
         </div>
       </div>
 
-      {/* Browser / Native Push Permission Card */}
+      {/* Native Push / Lockscreen Permission Card */}
       <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs flex items-center justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div
             className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
               permState === 'granted'
@@ -147,14 +201,14 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
               <Bell className="w-5 h-5" />
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-bold text-slate-900">
-              {permState === 'granted' ? 'Benachrichtigungen aktiv' : 'Benachrichtigungen erlauben'}
+              {permState === 'granted' ? 'Wecker-Meldungen aktiv' : 'Meldungen erlauben'}
             </p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
               {permState === 'granted'
-                ? 'Erinnerungen sind eingeschaltet.'
-                : 'Für pünktliche Wecker-Meldungen.'}
+                ? 'Klingelt mit Ton auch bei gesperrtem Handy.'
+                : 'Wichtig für Alarm bei geschlossener App.'}
             </p>
           </div>
         </div>
@@ -162,19 +216,50 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
           <button
             type="button"
             onClick={handleRequestPermission}
-            className="shrink-0 px-3 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600 transition"
+            className="shrink-0 px-3.5 py-2 rounded-xl app-accent-bg text-white text-xs font-bold active:scale-95 transition"
           >
             Erlauben
           </button>
         )}
       </div>
 
+      {/* Alarm Sound Picker */}
+      <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-2.5">
+        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+          <Volume2 className="w-4 h-4 app-accent-text" />
+          Weckton
+        </span>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { id: 'harp', label: 'Harfe' },
+              { id: 'chime', label: 'Glocke' },
+              { id: 'ping', label: 'Ping' },
+            ] as Array<{ id: AlarmSoundId; label: string }>
+          ).map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => {
+                onChange({ ...alarm, soundId: s.id });
+                playAlarmSound(s.id, soundEnabled || true);
+              }}
+              className={`py-2.5 px-2 rounded-2xl text-xs font-bold border transition flex flex-col items-center gap-1 active:scale-95 ${
+                alarm.soundId === s.id
+                  ? 'app-accent-soft'
+                  : 'bg-slate-50 text-slate-600 border-slate-200'
+              }`}
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Extra Alarm Times */}
       <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-800">Zusätzliche Weckzeiten</span>
-          <span className="text-[11px] text-slate-400">Optional (Backup-Wecker)</span>
-        </div>
+        <span className="text-xs font-bold text-slate-800 block">Zusatz-Wecker</span>
 
         {alarm.extraTimes.length > 0 && (
           <div className="space-y-2">
@@ -187,7 +272,7 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
                 <button
                   type="button"
                   onClick={() => removeExtraAlarm(t)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -196,20 +281,20 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
           </div>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <input
             type="time"
             value={newExtraTime}
             onChange={(e) => setNewExtraTime(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-800"
+            className="min-w-0 flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-800"
           />
           <button
             type="button"
             onClick={addExtraAlarm}
-            className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition"
+            className="shrink-0 inline-flex items-center gap-1 px-3.5 py-2.5 rounded-xl app-accent-soft border text-xs font-bold active:scale-95 transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            Hinzufügen
+            Plus
           </button>
         </div>
       </div>
@@ -218,8 +303,8 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
       <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-4">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-800">Schlummer-Intervall (Snooze)</span>
-            <span className="text-xs font-bold text-rose-600">alle {alarm.snoozeMinutes} Min.</span>
+            <span className="text-xs font-bold text-slate-800">Schlummern</span>
+            <span className="text-xs font-bold app-accent-text">alle {alarm.snoozeMinutes} Min.</span>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
             {[5, 10, 15, 30, 60].map((mins) => (
@@ -229,7 +314,7 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
                 onClick={() => onChange({ ...alarm, snoozeMinutes: mins })}
                 className={`py-2 rounded-xl text-xs font-bold border transition ${
                   alarm.snoozeMinutes === mins
-                    ? 'bg-[#D94E6A] text-white border-[#D94E6A]'
+                    ? 'app-accent-bg text-white'
                     : 'bg-slate-50 text-slate-600 border-slate-200'
                 }`}
               >
@@ -239,40 +324,37 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
           </div>
         </div>
 
-        <label className="flex items-center justify-between gap-3 cursor-pointer pt-1">
-          <div>
-            <p className="text-xs font-bold text-slate-800">Hartnäckig erinnern bis ausgedrückt</p>
-            <p className="text-[11px] text-slate-500">
-              Wiederholt den Alarm im Snooze-Takt, bis die heutige Pille genommen wurde.
-            </p>
-          </div>
+        <label className="flex items-center justify-between gap-3 cursor-pointer">
+          <span className="text-xs font-semibold text-slate-800">
+            Wiederholen bis Pille genommen
+          </span>
           <input
             type="checkbox"
             checked={alarm.repeatUntilTaken}
             onChange={(e) => onChange({ ...alarm, repeatUntilTaken: e.target.checked })}
-            className="w-4 h-4 accent-[#D94E6A]"
+            className="w-5 h-5 accent-[#D94E6A]"
           />
         </label>
 
-        <div className="pt-2 border-t border-slate-100">
+        <div className="pt-2.5 border-t border-slate-100">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              Einnahme-Toleranzfenster
+              Schutzfenster
             </span>
             <span className="text-xs font-bold text-emerald-700">{alarm.toleranceHours} Std.</span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {[
-              { h: 12, label: '12 Std. (Kombi)' },
-              { h: 3, label: '3 Std. (Minipille)' },
-              { h: 6, label: '6 Std. (Eigen)' },
+              { h: 12, label: '12 Std.' },
+              { h: 3, label: '3 Std.' },
+              { h: 6, label: '6 Std.' },
             ].map((opt) => (
               <button
                 key={opt.h}
                 type="button"
                 onClick={() => onChange({ ...alarm, toleranceHours: opt.h })}
-                className={`py-2 px-2 rounded-xl text-[11px] font-bold border transition ${
+                className={`py-2 rounded-xl text-xs font-bold border transition ${
                   alarm.toleranceHours === opt.h
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-400'
                     : 'bg-slate-50 text-slate-600 border-slate-200'
@@ -285,53 +367,19 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
         </div>
       </div>
 
-      {/* Alarm Sound Picker */}
-      <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-2.5">
-        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-          <Volume2 className="w-4 h-4 text-rose-500" />
-          Weckton auswählen & anhören
-        </span>
-        <div className="grid grid-cols-3 gap-2">
-          {(
-            [
-              { id: 'harp', label: 'Sanfte Harfe' },
-              { id: 'chime', label: 'Morgenglocke' },
-              { id: 'ping', label: 'Diskret Ping' },
-            ] as Array<{ id: AlarmSoundId; label: string }>
-          ).map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => {
-                onChange({ ...alarm, soundId: s.id });
-                playAlarmSound(s.id, soundEnabled || true);
-              }}
-              className={`py-2.5 px-2 rounded-2xl text-xs font-bold border transition flex flex-col items-center gap-1 ${
-                alarm.soundId === s.id
-                  ? 'bg-rose-50 text-rose-800 border-rose-400'
-                  : 'bg-slate-50 text-slate-600 border-slate-200'
-              }`}
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Discreet Lockscreen Mode */}
       <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-3">
         <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-          <EyeOff className="w-4 h-4 text-rose-500" />
-          Diskreter Sperrbildschirm-Text
+          <EyeOff className="w-4 h-4 app-accent-text" />
+          Sperrbildschirm-Text
         </span>
 
         <div className="grid grid-cols-2 gap-1.5">
           {(
             [
-              { id: 'standard', label: 'Standard (Pille 💊)' },
-              { id: 'routine', label: 'Tägliche Routine ✨' },
-              { id: 'water', label: 'Wasser trinken 💧' },
+              { id: 'standard', label: 'Standard' },
+              { id: 'routine', label: 'Tägliche Routine' },
+              { id: 'water', label: 'Wasser trinken' },
               { id: 'custom', label: 'Eigener Text' },
             ] as Array<{ id: DiscreetMode; label: string }>
           ).map((m) => (
@@ -341,7 +389,7 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
               onClick={() => onChange({ ...alarm, discreetMode: m.id })}
               className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition text-left ${
                 alarm.discreetMode === m.id
-                  ? 'bg-rose-50 text-rose-800 border-rose-400 font-bold'
+                  ? 'app-accent-soft font-bold'
                   : 'bg-slate-50 text-slate-600 border-slate-200'
               }`}
             >
@@ -356,19 +404,21 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
             value={alarm.customMessage}
             onChange={(e) => onChange({ ...alarm, customMessage: e.target.value })}
             placeholder="z. B. Vitamine nicht vergessen!"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-rose-400"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none"
           />
         )}
 
         {/* Lockscreen preview bubble */}
-        <div className="rounded-2xl bg-slate-900/92 text-white p-3 flex items-center gap-3 shadow-inner">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center text-xs font-bold shrink-0">
-            L
-          </div>
+        <div className="rounded-2xl bg-slate-900 text-white p-3 flex items-center gap-3 shadow-inner">
+          <img
+            src="/icon.png"
+            alt=""
+            className="w-8 h-8 rounded-xl object-cover shrink-0"
+          />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-bold truncate">{previewNotification.title}</p>
-              <span className="text-[10px] text-slate-400">jetzt</span>
+              <span className="text-[10px] text-slate-400 shrink-0">jetzt</span>
             </div>
             <p className="text-[11px] text-slate-300 truncate">{previewNotification.body}</p>
           </div>
@@ -378,37 +428,37 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
       {/* Pause & Refill Reminders */}
       <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-3">
         <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-          <Package className="w-4 h-4 text-rose-500" />
-          Pausen- & Rezept-Erinnerungen
+          <Package className="w-4 h-4 app-accent-text" />
+          Weitere Erinnerungen
         </span>
 
-        <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
-          <span>Auch in der Einnahmepause erinnern</span>
+        <label className="flex items-center justify-between gap-3 text-xs text-slate-700 cursor-pointer">
+          <span>Auch in der Pause erinnern</span>
           <input
             type="checkbox"
             checked={alarm.notifyOnPauseDays}
             onChange={(e) => onChange({ ...alarm, notifyOnPauseDays: e.target.checked })}
-            className="w-4 h-4 accent-[#D94E6A]"
+            className="w-5 h-5 accent-[#D94E6A]"
           />
         </label>
 
-        <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
-          <span>Am letzten Pausentag an neuen Blister erinnern</span>
+        <label className="flex items-center justify-between gap-3 text-xs text-slate-700 cursor-pointer">
+          <span>Vor neuem Blister erinnern</span>
           <input
             type="checkbox"
             checked={alarm.pauseEndReminder}
             onChange={(e) => onChange({ ...alarm, pauseEndReminder: e.target.checked })}
-            className="w-4 h-4 accent-[#D94E6A]"
+            className="w-5 h-5 accent-[#D94E6A]"
           />
         </label>
 
-        <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
-          <span>Rezept-Warnung bei &le; {alarm.refillThresholdDays} Pillen Vorrat</span>
+        <label className="flex items-center justify-between gap-3 text-xs text-slate-700 cursor-pointer">
+          <span>Rezept-Warnung ({alarm.refillThresholdDays} Tage vorher)</span>
           <input
             type="checkbox"
             checked={alarm.refillReminderEnabled}
             onChange={(e) => onChange({ ...alarm, refillReminderEnabled: e.target.checked })}
-            className="w-4 h-4 accent-[#D94E6A]"
+            className="w-5 h-5 accent-[#D94E6A]"
           />
         </label>
       </div>

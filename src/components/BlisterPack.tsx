@@ -59,7 +59,7 @@ interface PawPrint {
   angle: number;
 }
 
-type CatAnimPhase = 'idle' | 'walking' | 'eating' | 'happy';
+type CatAnimPhase = 'idle' | 'walking' | 'eating' | 'happy' | 'roaming' | 'sniffing' | 'sleeping';
 type BowlEatStage = 'full' | 'half' | 'empty';
 
 const ROTATION_SEEDS = [12, 74, 138, 196, 251, 314, 43, 109, 172, 229, 287, 342];
@@ -76,6 +76,9 @@ const PRELOAD_SPRITES = [
   '/assets/cat-walk-2.png',
   '/assets/cat-eat-1.png',
   '/assets/cat-eat-2.png',
+  '/assets/cat-sniff.png',
+  '/assets/cat-sleep-1.png',
+  '/assets/cat-sleep-2.png',
   '/assets/cat-bowl-full.png',
   '/assets/cat-bowl-half.png',
   '/assets/cat-bowl-empty.png',
@@ -140,6 +143,9 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   const [pawPrints, setPawPrints] = useState<PawPrint[]>([]);
   const [showCatTag, setShowCatTag] = useState(false);
   const catTimersRef = useRef<number[]>([]);
+  const roamTimersRef = useRef<number[]>([]);
+  const catPosRef = useRef<{ x: number; y: number }>({ x: 160, y: 30 });
+  const roamStepCountRef = useRef(0);
 
   const holdTimerRef = useRef<number | null>(null);
   const didHoldPopRef = useRef(false);
@@ -157,8 +163,22 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     catTimersRef.current = [];
   };
 
+  const clearRoamTimers = () => {
+    roamTimersRef.current.forEach((id) => window.clearTimeout(id));
+    roamTimersRef.current = [];
+  };
+
   useEffect(() => {
-    return () => clearCatTimers();
+    if (catPos) {
+      catPosRef.current = catPos;
+    }
+  }, [catPos]);
+
+  useEffect(() => {
+    return () => {
+      clearCatTimers();
+      clearRoamTimers();
+    };
   }, []);
 
   useEffect(() => {
@@ -167,13 +187,20 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     }
   }, [isCatBowl, isBackView]);
 
-  // Multi-frame sprite ticker for walking (140ms) and real eating (220ms)
+  // Multi-frame sprite ticker for walking/roaming (145ms), eating (220ms), and sleeping breath (1150ms)
   useEffect(() => {
-    if (catPhase !== 'walking' && catPhase !== 'eating') {
+    if (catPhase !== 'walking' && catPhase !== 'roaming' && catPhase !== 'eating' && catPhase !== 'sleeping') {
       setCatFrame(0);
       return;
     }
-    const intervalMs = catPhase === 'walking' ? 140 : 220;
+    const intervalMs =
+      catPhase === 'walking'
+        ? 140
+        : catPhase === 'roaming'
+        ? 165
+        : catPhase === 'eating'
+        ? 220
+        : 1150;
     const id = window.setInterval(() => {
       setCatFrame((f) => (f === 0 ? 1 : 0));
     }, intervalMs);
@@ -310,9 +337,99 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     return () => window.cancelAnimationFrame(raf);
   }, [isCatBowl, config.columns, config.shape, currentSheet, totalPhysicalPills]);
 
+  // AUTONOMOUS COZY LIFE: After eating at least 1 bowl, the cat roams across the blister, sniffs curiously, and curls up to sleep!
+  useEffect(() => {
+    if (!isCatBowl || poppedCount === 0 || eatingBowlIndex !== null) {
+      clearRoamTimers();
+      return;
+    }
+    if (catPhase !== 'idle') return;
+
+    const scheduleRoamCycle = () => {
+      clearRoamTimers();
+      const tStart = window.setTimeout(() => {
+        const cardEl = cardRef.current;
+        if (!cardEl) return;
+        const cw = cardEl.clientWidth || 320;
+        const ch = cardEl.clientHeight || 280;
+        const start = catPosRef.current;
+
+        // Every 3rd cycle, curl up peacefully for a nap! Otherwise stroll & sniff!
+        roamStepCountRef.current += 1;
+        const shouldNap = roamStepCountRef.current % 3 === 0;
+
+        // Pick a pleasant roaming point inside the blister card margins
+        const padX = 38;
+        const padTop = 44;
+        const padBottom = 38;
+        let destX = padX + Math.random() * Math.max(40, cw - padX * 2);
+        let destY = padTop + Math.random() * Math.max(40, ch - padTop - padBottom);
+        // Ensure a noticeable stroll distance
+        if (Math.hypot(destX - start.x, destY - start.y) < 55) {
+          destX = start.x > cw / 2 ? padX + 24 : cw - padX - 24;
+        }
+
+        const dx = destX - start.x;
+        const dy = destY - start.y;
+        const dist = Math.hypot(dx, dy);
+        const strollMs = Math.max(700, Math.min(1650, Math.round(dist * 6.2)));
+
+        setCatFacing(dx >= 0 ? 'right' : 'left');
+        setCatWalkMs(strollMs);
+        setCatPhase('roaming');
+
+        // Soft exploratory pawprints
+        const steps = Math.min(4, Math.max(2, Math.floor(dist / 42)));
+        const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+        const prints: PawPrint[] = [];
+        for (let s = 1; s <= steps; s++) {
+          const frac = s / (steps + 1);
+          prints.push({
+            id: Date.now() + s,
+            x: start.x + dx * frac + (s % 2 === 0 ? 4 : -4),
+            y: start.y + dy * frac + 14,
+            angle,
+          });
+        }
+        setPawPrints(prints);
+
+        window.requestAnimationFrame(() => {
+          setCatPos({ x: destX, y: destY });
+        });
+
+        const tArrive = window.setTimeout(() => {
+          setPawPrints([]);
+          if (shouldNap) {
+            // Curl up into a warm sleeping cinnamon roll with floating Zzz!
+            setCatPhase('sleeping');
+            const tWake = window.setTimeout(() => {
+              setCatPhase('idle');
+            }, 7200);
+            roamTimersRef.current.push(tWake);
+          } else {
+            // Sniff curiously around the blister!
+            setCatPhase('sniffing');
+            const tDoneSniff = window.setTimeout(() => {
+              setCatPhase('idle');
+            }, 2800);
+            roamTimersRef.current.push(tDoneSniff);
+          }
+        }, strollMs);
+
+        roamTimersRef.current.push(tArrive);
+      }, 2200);
+
+      roamTimersRef.current = [tStart];
+    };
+
+    scheduleRoamCycle();
+    return () => clearRoamTimers();
+  }, [isCatBowl, poppedCount, eatingBowlIndex, catPhase]);
+
   // REAL MULTI-STAGE WALK -> BITE -> HALF-BOWL -> CHEW -> EMPTY-BOWL -> HAPPY LICK CHOREOGRAPHY!
   const runCatToBowl = (dayIndex: number, date: string) => {
     clearCatTimers();
+    clearRoamTimers();
     const target = getPocketCenter(dayIndex);
     if (!target) {
       playCatMunchSound(soundEnabled);
@@ -517,7 +634,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
 
   // Current sprite URL for our animated cat
   const catSpriteSrc =
-    catPhase === 'walking'
+    catPhase === 'walking' || catPhase === 'roaming'
       ? catFrame === 0
         ? '/assets/cat-walk-1.png'
         : '/assets/cat-walk-2.png'
@@ -525,6 +642,12 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       ? catFrame === 0
         ? '/assets/cat-eat-1.png'
         : '/assets/cat-eat-2.png'
+      : catPhase === 'sniffing'
+      ? '/assets/cat-sniff.png'
+      : catPhase === 'sleeping'
+      ? catFrame === 0
+        ? '/assets/cat-sleep-1.png'
+        : '/assets/cat-sleep-2.png'
       : catPhase === 'happy'
       ? '/assets/cat-eat-2.png'
       : '/assets/cat-walk-1.png';
@@ -1162,11 +1285,12 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             </div>
           )}
 
-          {/* LIVE MULTI-FRAME WALKING & REAL EATING CAT! */}
+          {/* LIVE MULTI-FRAME WALKING, EATING, SNIFFING & SLEEPING CAT! */}
           {isCatBowl && catPos && (
             <button
               type="button"
               onClick={() => {
+                clearRoamTimers();
                 playCatPeekSound(soundEnabled);
                 triggerHaptic(hapticsEnabled, 'light');
                 setCatPhase('happy');
@@ -1190,7 +1314,12 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               <div
                 className="w-full h-full transition-transform duration-150"
                 style={{
-                  transform: catFacing === 'right' ? 'scaleX(-1)' : 'scaleX(1)',
+                  transform:
+                    catPhase === 'sleeping'
+                      ? 'scaleX(1)'
+                      : catFacing === 'right'
+                      ? 'scaleX(-1)'
+                      : 'scaleX(1)',
                 }}
               >
                 <img
@@ -1198,10 +1327,14 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                   alt={walkerName}
                   draggable={false}
                   className={`w-full h-full object-contain drop-shadow-md pointer-events-none ${
-                    catPhase === 'walking'
+                    catPhase === 'walking' || catPhase === 'roaming'
                       ? 'animate-cat-trot'
                       : catPhase === 'eating'
                       ? 'animate-cat-munch'
+                      : catPhase === 'sniffing'
+                      ? 'animate-cat-sniff'
+                      : catPhase === 'sleeping'
+                      ? 'animate-cat-sleep'
                       : catPhase === 'happy'
                       ? 'animate-kitten-joy'
                       : 'animate-cat-idle'
@@ -1209,12 +1342,40 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 />
               </div>
 
+              {/* Floating dreamy Zzz bubbles while curled up asleep */}
+              {catPhase === 'sleeping' && (
+                <div className="absolute -top-2 right-1 pointer-events-none select-none">
+                  <span className="absolute text-[10px] font-extrabold text-indigo-400 animate-zzz">
+                    z
+                  </span>
+                  <span
+                    className="absolute text-xs font-extrabold text-indigo-500 animate-zzz"
+                    style={{ left: '5px', animationDelay: '0.8s' }}
+                  >
+                    Z
+                  </span>
+                  <span
+                    className="absolute text-[9px] font-extrabold text-violet-400 animate-zzz"
+                    style={{ left: '-2px', animationDelay: '1.6s' }}
+                  >
+                    z
+                  </span>
+                </div>
+              )}
+
+              {/* Curious sniff sparkle when sniffing */}
+              {catPhase === 'sniffing' && (
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-white/90 border border-amber-200 text-[8px] font-bold text-amber-700 shadow-xs whitespace-nowrap pointer-events-none">
+                  schnupper…
+                </span>
+              )}
+
               {(catPhase === 'eating' || catPhase === 'happy' || showCatTag) && (
                 <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-white/95 border border-rose-200 text-[9px] font-extrabold text-rose-600 shadow-sm whitespace-nowrap pointer-events-none">
                   {catPhase === 'eating'
                     ? `${walkerName} mampft!`
                     : catPhase === 'happy'
-                    ? `${walkerName} ♥ lecker!`
+                    ? `${walkerName} ♥`
                     : `${walkerName} ♥`}
                 </span>
               )}

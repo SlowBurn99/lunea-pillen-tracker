@@ -10,6 +10,7 @@ const config: CapacitorConfig = {
   plugins: {
     LocalNotifications: {
       iconColor: '#D94E6A',
+      sound: 'alarm_harp.wav',
     },
   },
 };

@@ -423,6 +423,50 @@
   }
 }
 
+/* Curious nose-down sniffing bob */
+@keyframes catSniffBob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(2.5px) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(0.5px) rotate(-1deg);
+  }
+  75% {
+    transform: translateY(2.5px) rotate(-6deg);
+  }
+}
+
+/* Slow peaceful sleeping breath */
+@keyframes catSleepBreathe {
+  0%, 100% {
+    transform: scale(1, 1) translateY(0px);
+  }
+  50% {
+    transform: scale(1.05, 0.96) translateY(1px);
+  }
+}
+
+/* Floating dreamy Zzz bubbles above sleeping cat */
+@keyframes zzzFloat {
+  0% {
+    transform: translate(0px, 2px) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.95;
+  }
+  80% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(10px, -24px) scale(1.15);
+    opacity: 0;
+  }
+}
+
 .animate-cat-peek {
   animation: catPeekPop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
@@ -441,6 +485,18 @@
 
 .animate-cat-munch {
   animation: catRealEat 0.42s ease-in-out infinite;
+}
+
+.animate-cat-sniff {
+  animation: catSniffBob 0.75s ease-in-out infinite;
+}
+
+.animate-cat-sleep {
+  animation: catSleepBreathe 2.4s ease-in-out infinite;
+}
+
+.animate-zzz {
+  animation: zzzFloat 2.4s ease-out infinite;
 }
 
 .animate-cat-idle {
