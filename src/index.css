@@ -1,19 +1,218 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
+  :root,
+  [data-theme='rose'] {
     --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     --font-serif: 'Playfair Display', Georgia, serif;
+    --app-bg: #faf6f5;
+    --app-surface: #ffffff;
+    --app-surface-2: #f8fafc;
+    --app-text: #2b1f24;
+    --app-muted: #64748b;
+    --app-accent: #d94e6a;
+    --app-accent-dark: #b93654;
+    --app-accent-soft: #fff1f4;
+    --app-accent-border: #fecdd6;
+    --app-accent-ring: rgba(217, 78, 106, 0.28);
+  }
+
+  [data-theme='lavender'] {
+    --app-bg: #f7f5fc;
+    --app-surface: #ffffff;
+    --app-surface-2: #f5f3ff;
+    --app-text: #241e33;
+    --app-muted: #64748b;
+    --app-accent: #7c5ce6;
+    --app-accent-dark: #6241cf;
+    --app-accent-soft: #f3efff;
+    --app-accent-border: #ddd6fe;
+    --app-accent-ring: rgba(124, 92, 230, 0.28);
+  }
+
+  [data-theme='sage'] {
+    --app-bg: #f4f9f6;
+    --app-surface: #ffffff;
+    --app-surface-2: #eef6f1;
+    --app-text: #1b2a24;
+    --app-muted: #5a7066;
+    --app-accent: #2e8b6e;
+    --app-accent-dark: #226d55;
+    --app-accent-soft: #eaf7f1;
+    --app-accent-border: #bce4d4;
+    --app-accent-ring: rgba(46, 139, 110, 0.28);
+  }
+
+  [data-theme='peach'] {
+    --app-bg: #fcf6f2;
+    --app-surface: #ffffff;
+    --app-surface-2: #fff7f2;
+    --app-text: #2f201a;
+    --app-muted: #786258;
+    --app-accent: #df6c46;
+    --app-accent-dark: #c0522e;
+    --app-accent-soft: #fff1eb;
+    --app-accent-border: #fed7c6;
+    --app-accent-ring: rgba(223, 108, 70, 0.28);
+  }
+
+  [data-theme='sky'] {
+    --app-bg: #f3f8fc;
+    --app-surface: #ffffff;
+    --app-surface-2: #eff6fc;
+    --app-text: #1b2838;
+    --app-muted: #5b7086;
+    --app-accent: #3581c4;
+    --app-accent-dark: #2566a1;
+    --app-accent-soft: #ebf5ff;
+    --app-accent-border: #bfddf7;
+    --app-accent-ring: rgba(53, 129, 196, 0.28);
+  }
+
+  [data-theme='midnight'] {
+    --app-bg: #16131a;
+    --app-surface: #231e2a;
+    --app-surface-2: #2d2636;
+    --app-text: #f5eef4;
+    --app-muted: #a699b3;
+    --app-accent: #f06a8a;
+    --app-accent-dark: #d94e6a;
+    --app-accent-soft: #362230;
+    --app-accent-border: #553549;
+    --app-accent-ring: rgba(240, 106, 138, 0.34);
   }
 
   html,
   body {
     font-family: var(--font-sans);
-    background-color: #faf6f5;
-    color: #2b1f24;
+    background-color: var(--app-bg);
+    color: var(--app-text);
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
+}
+
+/* Global accent overrides so changing App Grundfarbe re-skins the whole app cleanly */
+.app-bg {
+  background-color: var(--app-bg) !important;
+  color: var(--app-text);
+}
+
+.app-header-bg {
+  background-color: color-mix(in srgb, var(--app-bg) 88%, transparent) !important;
+}
+
+.app-nav-bg {
+  background-color: color-mix(in srgb, var(--app-surface) 90%, transparent) !important;
+  border-color: var(--app-accent-border) !important;
+}
+
+.app-accent-bg {
+  background-color: var(--app-accent) !important;
+  border-color: var(--app-accent) !important;
+}
+
+.app-accent-text {
+  color: var(--app-accent) !important;
+}
+
+.app-accent-soft {
+  background-color: var(--app-accent-soft) !important;
+  border-color: var(--app-accent-border) !important;
+  color: var(--app-accent) !important;
+}
+
+.app-accent-gradient {
+  background-image: linear-gradient(135deg, var(--app-accent) 0%, var(--app-accent-dark) 100%) !important;
+}
+
+/* Dark theme automatic surface & text harmony */
+[data-theme='midnight'] .bg-white,
+[data-theme='midnight'] .bg-white\/90,
+[data-theme='midnight'] .bg-white\/85,
+[data-theme='midnight'] .bg-white\/80 {
+  background-color: var(--app-surface) !important;
+}
+
+[data-theme='midnight'] .bg-slate-50,
+[data-theme='midnight'] .bg-slate-50\/70,
+[data-theme='midnight'] .bg-slate-50\/60,
+[data-theme='midnight'] .bg-slate-100 {
+  background-color: var(--app-surface-2) !important;
+}
+
+[data-theme='midnight'] .bg-\[\#FAF6F5\] {
+  background-color: var(--app-bg) !important;
+}
+
+[data-theme='midnight'] .text-slate-900,
+[data-theme='midnight'] .text-slate-800,
+[data-theme='midnight'] .text-\[\#2B1F24\] {
+  color: var(--app-text) !important;
+}
+
+[data-theme='midnight'] .text-slate-700,
+[data-theme='midnight'] .text-slate-600 {
+  color: #d8cee2 !important;
+}
+
+[data-theme='midnight'] .text-slate-500,
+[data-theme='midnight'] .text-slate-400 {
+  color: var(--app-muted) !important;
+}
+
+[data-theme='midnight'] .border-rose-100,
+[data-theme='midnight'] .border-rose-100\/80,
+[data-theme='midnight'] .border-rose-200,
+[data-theme='midnight'] .border-rose-200\/80,
+[data-theme='midnight'] .border-slate-200,
+[data-theme='midnight'] .border-slate-200\/70,
+[data-theme='midnight'] .border-slate-200\/80,
+[data-theme='midnight'] .border-slate-100 {
+  border-color: #3a3245 !important;
+}
+
+[data-theme='midnight'] .bg-rose-50,
+[data-theme='midnight'] .bg-rose-50\/70,
+[data-theme='midnight'] .bg-rose-100 {
+  background-color: var(--app-accent-soft) !important;
+}
+
+[data-theme='midnight'] .text-rose-700,
+[data-theme='midnight'] .text-rose-800,
+[data-theme='midnight'] .text-rose-900 {
+  color: #fda4af !important;
+}
+
+/* Re-tint primary button & rose accent utilities on non-rose light themes */
+[data-theme]:not([data-theme='rose']) .bg-\[\#D94E6A\] {
+  background-color: var(--app-accent) !important;
+}
+[data-theme]:not([data-theme='rose']) .border-\[\#D94E6A\] {
+  border-color: var(--app-accent) !important;
+}
+[data-theme]:not([data-theme='rose']) .text-\[\#D94E6A\],
+[data-theme]:not([data-theme='rose']) .text-\[\#C23153\] {
+  color: var(--app-accent) !important;
+}
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .bg-rose-50,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .bg-rose-50\/70,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .bg-rose-100 {
+  background-color: var(--app-accent-soft) !important;
+}
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .border-rose-100,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .border-rose-100\/80,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .border-rose-200,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .border-rose-200\/80,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .border-rose-400 {
+  border-color: var(--app-accent-border) !important;
+}
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .text-rose-500,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .text-rose-600,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .text-rose-700,
+[data-theme]:not([data-theme='rose']):not([data-theme='midnight']) .text-rose-800 {
+  color: var(--app-accent) !important;
 }
 
 /* Realistic metallic aluminum blister pack styling */
@@ -159,8 +358,68 @@
     opacity: 1;
   }
   100% {
-    transform: translateY(-26px) scale(1.15);
+    transform: translateY(-28px) scale(1.2);
     opacity: 0;
+  }
+}
+
+/* Living idle wiggle / head-tilt for popped peeking kittens */
+@keyframes kittenAlive {
+  0%, 72%, 100% {
+    transform: translateY(0px) rotate(0deg) scale(1);
+  }
+  78% {
+    transform: translateY(-2.5px) rotate(-5deg) scale(1.04);
+  }
+  86% {
+    transform: translateY(-1px) rotate(5deg) scale(1.03);
+  }
+  93% {
+    transform: translateY(-2px) rotate(-2deg) scale(1.02);
+  }
+}
+
+/* Joyful bounce when a peeking kitten meows / smiles ^ ^ */
+@keyframes kittenJoyHop {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  30% {
+    transform: translateY(-5px) scale(1.12) rotate(-4deg);
+  }
+  65% {
+    transform: translateY(-1px) scale(1.05) rotate(3deg);
+  }
+  100% {
+    transform: translateY(0px) scale(1) rotate(0deg);
+  }
+}
+
+/* Flying kibble crumbs when cat eats from bowl */
+@keyframes crumbFly {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--cx), var(--cy)) scale(0.35) rotate(140deg);
+    opacity: 0;
+  }
+}
+
+/* Real chewing head-dip rhythm paired with sprite frame swaps */
+@keyframes catRealEat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg) scale(1);
+  }
+  40% {
+    transform: translateY(4px) rotate(-6deg) scale(1.05, 0.95);
+  }
+  75% {
+    transform: translateY(-2px) rotate(3deg) scale(0.98, 1.04);
   }
 }
 
@@ -168,12 +427,20 @@
   animation: catPeekPop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
+.animate-kitten-alive {
+  animation: kittenAlive 5.2s ease-in-out infinite;
+}
+
+.animate-kitten-joy {
+  animation: kittenJoyHop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
 .animate-cat-trot {
   animation: catTrot 0.24s ease-in-out infinite;
 }
 
 .animate-cat-munch {
-  animation: catMunch 0.28s ease-in-out infinite;
+  animation: catRealEat 0.42s ease-in-out infinite;
 }
 
 .animate-cat-idle {
@@ -182,6 +449,10 @@
 
 .animate-heart-float {
   animation: heartFloat 0.9s ease-out forwards;
+}
+
+.animate-crumb-fly {
+  animation: crumbFly 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Torn foil cavity seamless radial mask */

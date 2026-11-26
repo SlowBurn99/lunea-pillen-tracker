@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
-import type { AvatarId, UserProfile } from '../types';
-import { AVATAR_OPTIONS, ProfileAvatar } from './ProfileAvatar';
+import type { AvatarId, CatNames, UserProfile } from '../types';
+import { getAvatarOptions, ProfileAvatar } from './ProfileAvatar';
 
 interface ProfileFormProps {
   initial?: UserProfile | null;
+  catNames?: CatNames;
   submitLabel: string;
   onSubmit: (profile: UserProfile) => void;
   onCancel?: () => void;
@@ -13,6 +14,7 @@ interface ProfileFormProps {
 
 export const ProfileForm: React.FC<ProfileFormProps> = ({
   initial,
+  catNames,
   submitLabel,
   onSubmit,
   onCancel,
@@ -30,6 +32,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
   const [showOptional, setShowOptional] = useState(startExpanded);
   const [touched, setTouched] = useState(false);
 
+  const avatarOptions = getAvatarOptions(catNames);
   const trimmedName = name.trim();
   const nameInvalid = touched && trimmedName.length === 0;
 
@@ -58,22 +61,26 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
     'w-full px-3.5 py-2.5 rounded-2xl bg-white border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* Avatar picker */}
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-2">Wähle deinen Avatar</label>
+        <label className="block text-xs font-bold text-slate-700 mb-2">Avatar</label>
         <div className="grid grid-cols-3 gap-2">
-          {AVATAR_OPTIONS.map((opt) => (
+          {avatarOptions.map((opt) => (
             <button
               key={opt.id}
               type="button"
               onClick={() => setAvatar(opt.id)}
               className={`flex flex-col items-center gap-1 py-2 px-1 rounded-2xl transition ${
-                avatar === opt.id ? 'bg-rose-100 ring-2 ring-rose-400' : 'bg-slate-50/70 hover:bg-rose-50'
+                avatar === opt.id
+                  ? 'bg-rose-100 ring-2 ring-rose-400'
+                  : 'bg-slate-50/70 hover:bg-rose-50'
               }`}
             >
               <ProfileAvatar avatar={opt.id} size={44} />
-              <span className="text-[10px] font-semibold text-slate-600">{opt.label}</span>
+              <span className="text-[10px] font-semibold text-slate-600 truncate max-w-full px-1">
+                {opt.label}
+              </span>
             </button>
           ))}
         </div>
@@ -82,7 +89,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
       {/* Name (required) */}
       <div>
         <label htmlFor="profile-name" className="block text-xs font-bold text-slate-700 mb-1.5">
-          Dein Name <span className="text-rose-500">*</span>
+          Name <span className="text-rose-500">*</span>
         </label>
         <input
           id="profile-name"
@@ -92,11 +99,11 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
           maxLength={40}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => setTouched(true)}
-          placeholder="z. B. Lena"
-          className={`${inputClass} ${nameInvalid ? 'border-rose-500 ring-2 ring-rose-100' : ''}`}
+          placeholder="Dein Name"
+          className={`${inputClass} ${nameInvalid ? 'border-rose-500 ring-2 focus:ring-rose-100' : ''}`}
         />
         {nameInvalid && (
-          <p className="text-[11px] text-rose-600 font-medium mt-1">Bitte gib einen Namen ein.</p>
+          <p className="text-[11px] text-rose-600 font-medium mt-1">Bitte Namen eingeben.</p>
         )}
       </div>
 
@@ -106,13 +113,13 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
         onClick={() => setShowOptional((v) => !v)}
         className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-rose-50/70 border border-rose-100 text-xs font-bold text-rose-800"
       >
-        <span>Weitere Angaben (optional)</span>
+        <span>Mehr Infos (optional)</span>
         {showOptional ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
 
       {showOptional && (
-        <div className="space-y-3.5">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">Alter</label>
               <input
@@ -128,7 +135,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                Natürl. Zykluslänge
+                Zykluslänge
               </label>
               <input
                 type="number"
@@ -137,7 +144,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
                 max={60}
                 value={cycleLength}
                 onChange={(e) => setCycleLength(e.target.value)}
-                placeholder="z. B. 28 Tage"
+                placeholder="28 Tage"
                 className={inputClass}
               />
             </div>
@@ -145,7 +152,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
 
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-              Ich nehme die Pille seit
+              Pille seit
             </label>
             <input
               type="date"
@@ -163,7 +170,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
               type="text"
               value={doctor}
               onChange={(e) => setDoctor(e.target.value)}
-              placeholder="z. B. Dr. Müller, Tel. ..."
+              placeholder="Optional"
               className={inputClass}
             />
           </div>
@@ -174,7 +181,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="z. B. Allergien, Unverträglichkeiten ..."
+              placeholder="Optional"
               className={inputClass}
             />
           </div>

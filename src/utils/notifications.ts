@@ -8,7 +8,7 @@ export type NotificationPermissionState = 'granted' | 'denied' | 'default' | 'un
 export function getAlarmNotificationText(alarm: AlarmConfig): { title: string; body: string } {
   if (alarm.discreetMode === 'custom' && alarm.customMessage.trim()) {
     return {
-      title: 'Lunea Erinnerung',
+      title: 'Pille Erinnerung',
       body: alarm.customMessage.trim(),
     };
   }

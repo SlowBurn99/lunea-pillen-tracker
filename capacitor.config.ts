@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'de.lunea.pillentracker',
-  appName: 'Lunea',
+  appId: 'de.pille.tracker',
+  appName: 'Pille',
   webDir: 'dist',
   ios: {
     contentInset: 'never',

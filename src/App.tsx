@@ -13,7 +13,13 @@ import {
   LayoutGrid,
 } from 'lucide-react';
 import type { AppState, BlisterConfig, BlisterThemeId, DayLog, TabId } from './types';
-import { createInitialState, loadAppState, saveAppState } from './utils/storage';
+import { APP_COLOR_THEMES } from './data/presets';
+import {
+  clearAppStateStorage,
+  createInitialState,
+  loadAppState,
+  saveAppState,
+} from './utils/storage';
 import {
   addDays,
   diffDays,
@@ -28,7 +34,7 @@ import {
   syncNativeAlarms,
 } from './utils/notifications';
 import { playAlarmSound, playBlisterPopSound, triggerHaptic } from './utils/sound';
-import { BlisterPack } from './components/BlisterPack';
+import { BlisterPack, getPeekCatName } from './components/BlisterPack';
 import { BlisterCustomizerModal } from './components/BlisterCustomizerModal';
 import { CalendarView } from './components/CalendarView';
 import { AlarmView } from './components/AlarmView';
@@ -62,6 +68,17 @@ export function App() {
   useEffect(() => {
     saveAppState(state);
   }, [state]);
+
+  // Apply chosen App Base Color theme dynamically to root element + mobile theme-color meta
+  useEffect(() => {
+    const colorId = state.settings.appColor || 'rose';
+    document.documentElement.dataset.theme = colorId;
+    const metaTheme = APP_COLOR_THEMES.find((t) => t.id === colorId);
+    const metaEl = document.querySelector('meta[name="theme-color"]');
+    if (metaEl && metaTheme) {
+      metaEl.setAttribute('content', metaTheme.bg);
+    }
+  }, [state.settings.appColor]);
 
   // Sync Capacitor native notifications whenever alarm config changes
   useEffect(() => {
@@ -192,14 +209,16 @@ export function App() {
 
     const isPlacebo = dayIndex >= state.blister.activePills;
     const theme = state.blister.theme || 'classic_foil';
+    const walkerName = state.settings.catNames.walker?.trim() || 'Mimi';
+    const peekName = getPeekCatName(dayIndex, state.settings.catNames);
     showToast(
       theme === 'cat_bowl'
-        ? `Napf #${dayIndex + 1} leergefressen & gespeichert!`
+        ? `${walkerName} hat Napf #${dayIndex + 1} leergefressen!`
         : theme === 'cat_peek'
-        ? `Miau! Kätzchen #${dayIndex + 1} schaut heraus!`
+        ? `Miau! ${peekName} schaut heraus!`
         : isPlacebo
-        ? `Placebo #${dayIndex + 1} ausgedrückt ✓`
-        : `Pille #${dayIndex + 1} ausgedrückt & gespeichert ✨`
+        ? `Placebo #${dayIndex + 1} genommen ✓`
+        : `Pille #${dayIndex + 1} genommen ✓`
     );
   };
 
@@ -234,11 +253,32 @@ export function App() {
     }));
   };
 
-  const handleSaveBlisterConfig = (updated: BlisterConfig) => {
-    setState((prev) => ({
-      ...prev,
-      blister: updated,
-    }));
+  const handleSaveBlisterConfig = (updated: BlisterConfig, markPreviousTaken: boolean) => {
+    setState((prev) => {
+      const nextEntries = { ...prev.entries };
+      if (markPreviousTaken) {
+        const totalPhysical = updated.activePills + updated.placeboPills;
+        const dayToday = diffDays(updated.packStartDate, today);
+        const limit = Math.min(dayToday, totalPhysical);
+        for (let i = 0; i < limit; i++) {
+          const d = addDays(updated.packStartDate, i);
+          if (!nextEntries[d]) {
+            nextEntries[d] = {
+              dayIndex: i,
+              date: d,
+              status: 'taken',
+              takenAt: `${d}T${prev.alarm.time}:00`,
+              delayMinutes: 0,
+            };
+          }
+        }
+      }
+      return {
+        ...prev,
+        blister: updated,
+        entries: nextEntries,
+      };
+    });
     showToast(`Blister aktualisiert (${updated.activePills + updated.placeboPills} Pillen)`);
   };
 
@@ -332,6 +372,7 @@ export function App() {
   if (!state.profile) {
     return (
       <OnboardingScreen
+        catNames={state.settings.catNames}
         onComplete={(profile) => setState((prev) => ({ ...prev, profile }))}
       />
     );
@@ -345,11 +386,11 @@ export function App() {
   })();
 
   return (
-    <div className="min-h-screen bg-[#FAF6F5] text-[#2B1F24] flex flex-col items-center">
+    <div className="min-h-screen app-bg flex flex-col items-center">
       {/* Main Mobile-First Centered App Container */}
       <div className="w-full max-w-md min-h-screen flex flex-col relative pb-24">
         {/* Top Header */}
-        <header className="pt-safe px-5 pt-4 pb-3 flex items-center justify-between gap-2 sticky top-0 z-30 bg-[#FAF6F5]/88 backdrop-blur-md">
+        <header className="pt-safe px-5 pt-4 pb-3 flex items-center justify-between gap-2 sticky top-0 z-30 app-header-bg backdrop-blur-md">
           <button
             type="button"
             onClick={() => setActiveTab('settings')}
@@ -405,71 +446,65 @@ export function App() {
                 </div>
               )}
 
-              {/* Today Status Hero Banner */}
+              {/* Today Status Compact Card */}
               {isInPause ? (
-                <div className="rounded-3xl bg-gradient-to-r from-violet-500 to-rose-400 text-white p-4 shadow-md flex items-center justify-between gap-3">
+                <div className="rounded-3xl bg-gradient-to-r from-violet-500 to-rose-400 text-white px-4 py-3.5 shadow-sm flex items-center justify-between gap-3">
                   <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-violet-100 flex items-center gap-1">
-                      <Droplets className="w-3.5 h-3.5" />
-                      Einnahmepause • Tag {cycleDayIndex - totalPhysicalPills + 1} von {state.blister.pauseDays}
-                    </span>
-                    <p className="text-base font-extrabold mt-0.5">Heute keine Pille nötig</p>
-                    <p className="text-xs text-white/85 mt-0.5">
-                      Neuer Blister startet in {totalCycleDays - cycleDayIndex} Tag(en).
+                    <p className="text-sm font-bold flex items-center gap-1.5">
+                      <Droplets className="w-4 h-4" />
+                      Pause • Tag {cycleDayIndex - totalPhysicalPills + 1}/{state.blister.pauseDays}
                     </p>
+                    <p className="text-xs text-white/85">Heute keine Pille nötig</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setActiveTab('calendar')}
-                    className="shrink-0 px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-xs font-bold backdrop-blur-xs transition"
+                    className="shrink-0 px-3 py-1.5 rounded-xl bg-white/20 text-xs font-bold"
                   >
-                    Blutung loggen
+                    Blutung
                   </button>
                 </div>
               ) : isTodayTaken ? (
-                <div className="rounded-3xl bg-white border border-emerald-200/80 p-4 shadow-xs flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-sm shadow-emerald-200 shrink-0">
-                      <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-900">
-                        Heutige Pille genommen!
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Ausgedrückt um {formatTimeFromIso(todayEntry?.takenAt)} • Serie: {streak} Tage 🔥
-                      </p>
-                    </div>
+                <div className="rounded-3xl bg-white border border-emerald-200/80 px-4 py-3 shadow-xs flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900">Heute erledigt</p>
+                    <p className="text-xs text-slate-500">
+                      {formatTimeFromIso(todayEntry?.takenAt)}
+                      {streak > 1 ? ` • ${streak} Tage in Folge` : ''}
+                    </p>
                   </div>
                 </div>
               ) : (
-                <div className="rounded-3xl bg-white border border-rose-200/90 p-4 shadow-xs flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                <div className="rounded-3xl bg-white border border-rose-200/80 px-4 py-3 shadow-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                      className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
                         alarmCountdown.isPastToday
                           ? 'bg-amber-100 text-amber-700'
                           : 'bg-rose-100 text-rose-600'
                       }`}
                     >
                       {alarmCountdown.isPastToday ? (
-                        <AlertTriangle className="w-5 h-5" />
+                        <AlertTriangle className="w-4 h-4" />
                       ) : (
-                        <Clock className="w-5 h-5" />
+                        <Clock className="w-4 h-4" />
                       )}
                     </div>
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-900">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 truncate">
                         {isTodayPlacebo
-                          ? 'Heute: Placebo-Pille fällig'
+                          ? 'Placebo heute offen'
                           : alarmCountdown.isPastToday
-                          ? 'Heutige Pille noch offen'
-                          : 'Bereit für deine heutige Pille'}
+                          ? 'Heute noch offen'
+                          : `Wecker um ${state.alarm.time}`}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500">
                         {alarmCountdown.isPastToday
-                          ? `Wecker war um ${state.alarm.time} Uhr (${state.alarm.toleranceHours} Std. Schutzfenster)`
-                          : `Wecker in ${alarmCountdown.hours} Std. ${alarmCountdown.minutes} Min. • Tippe unten auf „Heute“`}
+                          ? `${state.alarm.toleranceHours} Std. Fenster`
+                          : `in ${alarmCountdown.hours} Std. ${alarmCountdown.minutes} Min.`}
                       </p>
                     </div>
                   </div>
@@ -481,17 +516,18 @@ export function App() {
                         triggerHaptic(state.settings.hapticsEnabled, 'heavy');
                         handlePopPill(cycleDayIndex, today);
                       }}
-                      className="shrink-0 px-3 py-2 rounded-xl bg-[#D94E6A] hover:bg-[#c23b57] text-white text-xs font-bold shadow-xs active:scale-95 transition"
+                      className="shrink-0 px-3.5 py-2 rounded-xl bg-[#D94E6A] text-white text-xs font-bold shadow-xs active:scale-95 transition"
                     >
-                      Ausdrücken
+                      Genommen
                     </button>
                   )}
                 </div>
               )}
 
-              {/* INTERACTIVE REALISTIC BLISTER PACK */}
+              {/* INTERACTIVE BLISTER PACK */}
               <BlisterPack
                 config={state.blister}
+                catNames={state.settings.catNames}
                 entries={state.entries}
                 soundEnabled={state.settings.soundEnabled}
                 hapticsEnabled={state.settings.hapticsEnabled}
@@ -504,12 +540,6 @@ export function App() {
                 onOpenCustomizer={() => setCustomizerOpen(true)}
                 onStartNewPack={handleStartNewPack}
               />
-
-              {/* Subtle tactile tip */}
-              <p className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5 pt-1">
-                <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-                Tippe auf eine Pille im Blister zum Ausdrücken • „Größe“ für andere Marken
-              </p>
             </>
           )}
 
@@ -550,11 +580,23 @@ export function App() {
                 setState((prev) => ({ ...prev, profile }));
                 showToast('Profil gespeichert');
               }}
-              onResetAll={() => {
-                const fresh = createInitialState();
-                setState((prev) => ({ ...fresh, profile: prev.profile }));
+              onClearProgress={() => {
+                setState((prev) => ({
+                  ...prev,
+                  blister: { ...prev.blister, packStartDate: today },
+                  entries: {},
+                  dayLogs: {},
+                  history: [],
+                }));
                 setActiveTab('blister');
-                showToast('Demo-Daten wurden zurückgesetzt');
+                showToast('Stand wurde gelöscht');
+              }}
+              onResetAll={() => {
+                clearAppStateStorage();
+                const fresh = createInitialState();
+                setState(fresh);
+                setActiveTab('blister');
+                setUnlocked(true);
               }}
             />
           )}
@@ -568,7 +610,7 @@ export function App() {
         )}
 
         {/* Bottom iOS-Style Frosted Tab Bar */}
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white/88 backdrop-blur-xl border-t border-rose-100/90 px-2 pt-2 pb-safe shadow-[0_-8px_30px_rgba(43,31,36,0.06)]">
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 app-nav-bg backdrop-blur-xl border-t px-2 pt-2 pb-safe shadow-[0_-8px_30px_rgba(43,31,36,0.06)]">
           <div className="grid grid-cols-5 gap-1">
             {(
               [

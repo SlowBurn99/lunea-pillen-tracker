@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   RotateCw,
   SlidersHorizontal,
-  Sparkles,
   Check,
   AlertCircle,
   Clock,
@@ -15,7 +14,7 @@ import {
   Disc,
   Utensils,
 } from 'lucide-react';
-import type { BlisterConfig, BlisterThemeId, PillEntry } from '../types';
+import type { BlisterConfig, BlisterThemeId, CatNames, PillEntry } from '../types';
 import { BLISTER_THEMES, PILL_COLORS } from '../data/presets';
 import {
   addDays,
@@ -34,6 +33,7 @@ import {
 
 interface BlisterPackProps {
   config: BlisterConfig;
+  catNames: CatNames;
   entries: Record<string, PillEntry>;
   soundEnabled: boolean;
   hapticsEnabled: boolean;
@@ -59,6 +59,9 @@ interface PawPrint {
   angle: number;
 }
 
+type CatAnimPhase = 'idle' | 'walking' | 'eating' | 'happy';
+type BowlEatStage = 'full' | 'half' | 'empty';
+
 const ROTATION_SEEDS = [12, 74, 138, 196, 251, 314, 43, 109, 172, 229, 287, 342];
 
 const THEME_ICONS: Record<BlisterThemeId, React.ComponentType<{ className?: string }>> = {
@@ -68,8 +71,28 @@ const THEME_ICONS: Record<BlisterThemeId, React.ComponentType<{ className?: stri
   rosegold_bloom: Flower2,
 };
 
+const PRELOAD_SPRITES = [
+  '/assets/cat-walk-1.png',
+  '/assets/cat-walk-2.png',
+  '/assets/cat-eat-1.png',
+  '/assets/cat-eat-2.png',
+  '/assets/cat-bowl-full.png',
+  '/assets/cat-bowl-half.png',
+  '/assets/cat-bowl-empty.png',
+  '/assets/cat-peek-happy-0.png',
+  '/assets/cat-peek-happy-1.png',
+  '/assets/cat-peek-happy-2.png',
+  '/assets/cat-peek-happy-3.png',
+];
+
+export function getPeekCatName(dayIndex: number, catNames: CatNames): string {
+  const keys: Array<keyof CatNames> = ['peek0', 'peek1', 'peek2', 'peek3'];
+  return catNames[keys[dayIndex % 4]]?.trim() || `Kätzchen ${(dayIndex % 4) + 1}`;
+}
+
 export const BlisterPack: React.FC<BlisterPackProps> = ({
   config,
+  catNames,
   entries,
   soundEnabled,
   hapticsEnabled,
@@ -86,6 +109,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   const isCatBowl = theme === 'cat_bowl';
   const isCatPeek = theme === 'cat_peek';
   const isRoseGold = theme === 'rosegold_bloom';
+  const walkerName = catNames.walker?.trim() || 'Mimi';
 
   const [isBackView, setIsBackView] = useState(false);
   const [poppingAnim, setPoppingAnim] = useState<PopAnimationState | null>(null);
@@ -99,19 +123,34 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   } | null>(null);
   const [activeBlock, setActiveBlock] = useState(0);
 
-  // Cat Bowl live walking & eating state
+  // Peeking kittens live expressions (which pocket indices are currently smiling/meowing ^ ^)
+  const [happyKittenIdx, setHappyKittenIdx] = useState<number | null>(null);
+
+  // Cat Bowl multi-frame walking & REAL eating choreography state
   const cardRef = useRef<HTMLDivElement | null>(null);
   const pocketRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const [catPos, setCatPos] = useState<{ x: number; y: number } | null>(null);
   const [catFacing, setCatFacing] = useState<'left' | 'right'>('right');
-  const [catState, setCatState] = useState<'idle' | 'walking' | 'eating'>('idle');
+  const [catPhase, setCatPhase] = useState<CatAnimPhase>('idle');
+  const [catFrame, setCatFrame] = useState<0 | 1>(0);
   const [catWalkMs, setCatWalkMs] = useState(550);
   const [eatingBowlIndex, setEatingBowlIndex] = useState<number | null>(null);
+  const [eatingBowlStage, setEatingBowlStage] = useState<BowlEatStage>('full');
+  const [crumbBurstKey, setCrumbBurstKey] = useState(0);
   const [pawPrints, setPawPrints] = useState<PawPrint[]>([]);
+  const [showCatTag, setShowCatTag] = useState(false);
   const catTimersRef = useRef<number[]>([]);
 
   const holdTimerRef = useRef<number | null>(null);
   const didHoldPopRef = useRef(false);
+
+  // Preload all multi-frame sprites for flicker-free animation
+  useEffect(() => {
+    PRELOAD_SPRITES.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []);
 
   const clearCatTimers = () => {
     catTimersRef.current.forEach((id) => window.clearTimeout(id));
@@ -122,12 +161,24 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     return () => clearCatTimers();
   }, []);
 
-  // Reset back view when switching to cat_bowl (bowl mat has no foil back)
   useEffect(() => {
     if (isCatBowl && isBackView) {
       setIsBackView(false);
     }
   }, [isCatBowl, isBackView]);
+
+  // Multi-frame sprite ticker for walking (140ms) and real eating (220ms)
+  useEffect(() => {
+    if (catPhase !== 'walking' && catPhase !== 'eating') {
+      setCatFrame(0);
+      return;
+    }
+    const intervalMs = catPhase === 'walking' ? 140 : 220;
+    const id = window.setInterval(() => {
+      setCatFrame((f) => (f === 0 ? 1 : 0));
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [catPhase]);
 
   const totalPhysicalPills = config.activePills + config.placeboPills;
   const totalCycleDays = totalPhysicalPills + config.pauseDays;
@@ -172,6 +223,27 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     return list;
   }, [config.packStartDate, config.activePills, entries, sheetStart, sheetEnd, today]);
 
+  // Periodic lively happy-meow/smile animation on random popped peeking kittens!
+  const poppedIndices = useMemo(
+    () =>
+      pills
+        .filter((p) => p.entry?.status === 'taken' || p.entry?.status === 'late')
+        .map((p) => p.dayIndex),
+    [pills]
+  );
+
+  useEffect(() => {
+    if (!isCatPeek || poppedIndices.length === 0) return;
+    const id = window.setInterval(() => {
+      const pick = poppedIndices[Math.floor(Math.random() * poppedIndices.length)];
+      setHappyKittenIdx(pick);
+      window.setTimeout(() => {
+        setHappyKittenIdx((cur) => (cur === pick ? null : cur));
+      }, 1150);
+    }, 3200);
+    return () => window.clearInterval(id);
+  }, [isCatPeek, poppedIndices]);
+
   const rows = useMemo(() => {
     const cols = Math.max(3, Math.min(7, config.columns));
     const result: Array<{
@@ -202,7 +274,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     return count;
   }, [totalPhysicalPills, config.packStartDate, entries]);
 
-  // Measure pocket center relative to blister card
   const getPocketCenter = (dayIndex: number): { x: number; y: number } | null => {
     const cardEl = cardRef.current;
     const pocketEl = pocketRefs.current.get(dayIndex);
@@ -215,29 +286,31 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     };
   };
 
-  // Position the cat neatly when entering Cat Bowl mode
+  // Position cat cleanly: when 0 bowls eaten, rest nicely in top-center lounge (never hiding Bowl #1!)
   useEffect(() => {
     if (!isCatBowl) return;
     const raf = window.requestAnimationFrame(() => {
-      // Find the last popped bowl on this sheet, or park beside today's/first bowl
+      const cardW = cardRef.current?.clientWidth || 320;
       const poppedPills = pills.filter(
         (p) => p.entry?.status === 'taken' || p.entry?.status === 'late'
       );
-      const anchor = poppedPills[poppedPills.length - 1] || pills[0];
-      if (anchor) {
-        const pt = getPocketCenter(anchor.dayIndex);
-        if (pt) {
-          setCatPos({ x: pt.x, y: Math.max(40, pt.y - 14) });
-          setCatState('idle');
-          return;
-        }
+      if (poppedPills.length === 0) {
+        setCatPos({ x: cardW / 2, y: 30 });
+        setCatFacing('left');
+        setCatPhase('idle');
+        return;
       }
-      setCatPos({ x: 56, y: 68 });
+      const anchor = poppedPills[poppedPills.length - 1];
+      const pt = getPocketCenter(anchor.dayIndex);
+      if (pt) {
+        setCatPos({ x: pt.x + 12, y: Math.max(36, pt.y - 16) });
+        setCatPhase('idle');
+      }
     });
     return () => window.cancelAnimationFrame(raf);
   }, [isCatBowl, config.columns, config.shape, currentSheet, totalPhysicalPills]);
 
-  // Send the cat walking to the clicked bowl, munch it empty, and mark pill taken!
+  // REAL MULTI-STAGE WALK -> BITE -> HALF-BOWL -> CHEW -> EMPTY-BOWL -> HAPPY LICK CHOREOGRAPHY!
   const runCatToBowl = (dayIndex: number, date: string) => {
     clearCatTimers();
     const target = getPocketCenter(dayIndex);
@@ -247,61 +320,78 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       return;
     }
 
-    const start = catPos || { x: 48, y: 56 };
-    const dest = { x: target.x, y: Math.max(36, target.y - 12) };
+    const cardW = cardRef.current?.clientWidth || 320;
+    const start = catPos || { x: cardW / 2, y: 30 };
+    // Position cat slightly offset beside the bowl so her head dips directly into the bowl!
+    const standOnRight = target.x < cardW * 0.72;
+    const dest = {
+      x: standOnRight ? target.x + 22 : target.x - 22,
+      y: Math.max(34, target.y - 8),
+    };
     const dx = dest.x - start.x;
     const dy = dest.y - start.y;
     const dist = Math.hypot(dx, dy);
-    const travelDuration = Math.max(360, Math.min(820, Math.round(dist * 3.1)));
+    const travelDuration = Math.max(420, Math.min(860, Math.round(dist * 3.3)));
 
-    // Sprite natively faces LEFT, so walking right flips it horizontally
+    // Sprite natively faces LEFT
     setCatFacing(dx >= 0 ? 'right' : 'left');
     setCatWalkMs(travelDuration);
-    setCatState('walking');
+    setCatPhase('walking');
     setEatingBowlIndex(dayIndex);
+    setEatingBowlStage('full');
     triggerHaptic(hapticsEnabled, 'light');
 
-    // Generate cute pawprints along the path
-    const steps = Math.min(5, Math.max(2, Math.floor(dist / 36)));
+    // Pawprint trail along walking line
+    const steps = Math.min(6, Math.max(2, Math.floor(dist / 32)));
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
     const prints: PawPrint[] = [];
     for (let s = 1; s <= steps; s++) {
       const frac = s / (steps + 1);
       prints.push({
         id: Date.now() + s,
-        x: start.x + dx * frac + (s % 2 === 0 ? 4 : -4),
-        y: start.y + dy * frac + 12,
+        x: start.x + dx * frac + (s % 2 === 0 ? 5 : -5),
+        y: start.y + dy * frac + 14,
         angle,
       });
     }
     setPawPrints(prints);
 
-    // Move cat!
     window.requestAnimationFrame(() => {
       setCatPos(dest);
     });
 
-    // Arrive & start munching
+    // 1. Arrive at bowl, turn to face the bowl directly, start real biting & chewing!
     const tArrive = window.setTimeout(() => {
-      setCatState('eating');
+      setCatFacing(standOnRight ? 'left' : 'right');
+      setCatPhase('eating');
+      setCrumbBurstKey((k) => k + 1);
       playCatMunchSound(soundEnabled);
       triggerHaptic(hapticsEnabled, 'medium');
     }, travelDuration);
 
-    // Mid-munch: bowl empties & pill records as taken!
+    // 2. Bite 2: Bowl visibly drops from FULL -> HALF-EATEN + second crumb burst!
+    const tHalf = window.setTimeout(() => {
+      setEatingBowlStage('half');
+      setCrumbBurstKey((k) => k + 1);
+      triggerHaptic(hapticsEnabled, 'light');
+    }, travelDuration + 460);
+
+    // 3. Final bite: Bowl becomes LICKED CLEAN EMPTY + record pill!
     const tEmpty = window.setTimeout(() => {
+      setEatingBowlStage('empty');
+      setCatPhase('happy');
       onPopPill(dayIndex, date);
       triggerHaptic(hapticsEnabled, 'heavy');
-    }, travelDuration + 320);
+    }, travelDuration + 1020);
 
-    // Finish eating & return to happy idle
+    // 4. Satisfied lip-lick pause, then calm idle!
     const tDone = window.setTimeout(() => {
-      setCatState('idle');
+      setCatPhase('idle');
       setEatingBowlIndex(null);
       setPawPrints([]);
-    }, travelDuration + 820);
+    }, travelDuration + 1680);
 
-    catTimersRef.current = [tArrive, tEmpty, tDone];
+    catTimersRef.current = [tArrive, tHalf, tEmpty, tDone];
   };
 
   const executePop = (dayIndex: number, date: string, isPlacebo: boolean) => {
@@ -315,6 +405,10 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
 
     if (isCatPeek) {
       playCatPeekSound(soundEnabled);
+      setHappyKittenIdx(dayIndex);
+      window.setTimeout(() => {
+        setHappyKittenIdx((cur) => (cur === dayIndex ? null : cur));
+      }, 1650);
     } else {
       playBlisterPopSound(soundEnabled);
     }
@@ -331,6 +425,15 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   const handlePocketInteraction = (pill: (typeof pills)[number]) => {
     const isPopped = pill.entry?.status === 'taken' || pill.entry?.status === 'late';
     if (isPopped) {
+      if (isCatPeek) {
+        // Petting a popped kitten triggers a happy meow animation before opening details!
+        playCatPeekSound(soundEnabled);
+        triggerHaptic(hapticsEnabled, 'light');
+        setHappyKittenIdx(pill.dayIndex);
+        window.setTimeout(() => {
+          setHappyKittenIdx((cur) => (cur === pill.dayIndex ? null : cur));
+        }, 1200);
+      }
       setSelectedPill({
         dayIndex: pill.dayIndex,
         date: pill.date,
@@ -408,20 +511,39 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     });
   }, [config.pauseDays, config.packStartDate, totalPhysicalPills, today]);
 
-  const isPackFinished = poppedCount >= totalPhysicalPills || currentCycleIndex >= totalCycleDays;
+  const isPackFinished =
+    totalPhysicalPills > 0 &&
+    (poppedCount >= totalPhysicalPills || currentCycleIndex >= totalCycleDays);
 
-  // Render a single realistic / themed blister pocket
+  // Current sprite URL for our animated cat
+  const catSpriteSrc =
+    catPhase === 'walking'
+      ? catFrame === 0
+        ? '/assets/cat-walk-1.png'
+        : '/assets/cat-walk-2.png'
+      : catPhase === 'eating'
+      ? catFrame === 0
+        ? '/assets/cat-eat-1.png'
+        : '/assets/cat-eat-2.png'
+      : catPhase === 'happy'
+      ? '/assets/cat-eat-2.png'
+      : '/assets/cat-walk-1.png';
+
   const renderPocket = (pill: (typeof pills)[number], compactSize = false) => {
     const status = pill.entry?.status;
     const isPopped = status === 'taken' || status === 'late';
     const isMissed = status === 'missed' || (pill.isPast && !isPopped && !pill.isPlacebo);
     const isJustPopping = poppingAnim?.dayIndex === pill.dayIndex;
-    const isBeingEaten = isCatBowl && eatingBowlIndex === pill.dayIndex && catState === 'eating';
+    const isActiveEatBowl = isCatBowl && eatingBowlIndex === pill.dayIndex;
+    const isBeingEaten = isActiveEatBowl && catPhase === 'eating';
     const isPressing = pressingIndex === pill.dayIndex;
+    const isKittenHappy = isCatPeek && happyKittenIdx === pill.dayIndex;
     const colorKey = pill.isPlacebo ? config.placeboColor : config.activeColor;
     const colorStyle = PILL_COLORS[colorKey];
     const rotation = ROTATION_SEEDS[pill.dayIndex % ROTATION_SEEDS.length];
     const catVariantIdx = pill.dayIndex % 4;
+    // Staggered organic delay for each kitten's living head-tilt animation
+    const kittenDelaySec = `${((pill.dayIndex * 0.85) % 4.5).toFixed(2)}s`;
 
     const pocketDim = compactSize
       ? 'w-9 h-9 sm:w-10 sm:h-10'
@@ -431,14 +553,22 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       ? 'w-12 h-12 sm:w-13 sm:h-13'
       : 'w-14 h-14 sm:w-15 sm:h-15';
 
+    // Determine exact bowl image (full -> half -> empty during real eating!)
+    const bowlSrc = isPopped
+      ? '/assets/cat-bowl-empty.png'
+      : isActiveEatBowl && eatingBowlStage === 'half'
+      ? '/assets/cat-bowl-half.png'
+      : isActiveEatBowl && eatingBowlStage === 'empty'
+      ? '/assets/cat-bowl-empty.png'
+      : '/assets/cat-bowl-full.png';
+
     return (
       <div key={pill.dayIndex} className="relative flex flex-col items-center">
-        {/* Weekday micro label */}
         {config.showWeekdays && (
           <span
             className={`text-[10px] font-bold tracking-tight mb-1 leading-none select-none ${
               pill.isToday
-                ? 'text-[#C23153] font-extrabold'
+                ? 'app-accent-text font-extrabold'
                 : isCatBowl
                 ? isPopped
                   ? 'text-amber-700/55'
@@ -452,7 +582,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
           </span>
         )}
 
-        {/* Interactive Pocket Button */}
         <button
           ref={(el) => {
             if (el) pocketRefs.current.set(pill.dayIndex, el);
@@ -464,22 +593,11 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
           onPointerLeave={clearPointerPress}
           onPointerCancel={clearPointerPress}
           onClick={() => handleClickPocket(pill)}
-          aria-label={`Tag ${pill.dayIndex + 1}, ${pill.weekday} ${formatDateShort(pill.date)}, ${
-            isPopped
-              ? isCatBowl
-                ? 'Napf leergefressen'
-                : 'eingenommen'
-              : pill.isPlacebo
-              ? 'Placebo'
-              : isCatBowl
-              ? 'Voller Napf'
-              : 'noch im Blister'
-          }`}
+          aria-label={`Tag ${pill.dayIndex + 1}, ${pill.weekday} ${formatDateShort(pill.date)}`}
           className={`relative ${pocketDim} rounded-full flex items-center justify-center cursor-pointer select-none transition-transform duration-150 focus:outline-none ${
             pill.isToday && !isPopped ? 'animate-today-pulse' : ''
           } ${isPressing ? 'scale-[0.88]' : 'hover:scale-[1.05] active:scale-[0.90]'}`}
         >
-          {/* Outer pocket rim */}
           {!isCatBowl && (
             <span
               className={`absolute inset-[-2px] rounded-full pointer-events-none ${
@@ -494,10 +612,8 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             />
           )}
 
-          {/* THEME 1: CAT BOWL DESIGN */}
           {isCatBowl ? (
             <div className="relative w-full h-full flex items-center justify-center">
-              {/* Soft mat coaster ring beneath bowl */}
               <span
                 className={`absolute inset-[-2px] rounded-full pointer-events-none ${
                   isMissed && !isPopped
@@ -508,12 +624,12 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 }`}
               />
               <img
-                src={isPopped ? '/assets/cat-bowl-empty.png' : '/assets/cat-bowl-full.png'}
+                src={bowlSrc}
                 alt=""
                 draggable={false}
-                className={`w-[108%] h-[108%] max-w-none object-contain drop-shadow-sm transition-all duration-300 pointer-events-none ${
-                  isPopped ? 'opacity-95' : ''
-                } ${isBeingEaten ? 'scale-95' : ''}`}
+                className={`w-[108%] h-[108%] max-w-none object-contain drop-shadow-sm transition-all duration-200 pointer-events-none ${
+                  isBeingEaten ? 'scale-95' : ''
+                }`}
               />
               {pill.isPlacebo && !isPopped && (
                 <span className="absolute -top-1 -right-1 px-1 rounded-full bg-violet-500 text-white text-[7px] font-bold shadow-xs">
@@ -527,36 +643,67 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                   }`}
                 />
               )}
-              {/* Floating hearts & crumbs while cat munches */}
+
+              {/* Real flying brown kibble crumbs & pink hearts during eating! */}
               {isBeingEaten && (
-                <>
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-rose-500 text-xs font-bold animate-heart-float pointer-events-none z-40">
+                <div key={crumbBurstKey} className="absolute inset-0 pointer-events-none z-40">
+                  {[
+                    { cx: '-16px', cy: '-18px' },
+                    { cx: '18px', cy: '-15px' },
+                    { cx: '-12px', cy: '-24px' },
+                    { cx: '10px', cy: '-22px' },
+                    { cx: '0px', cy: '-26px' },
+                  ].map((c, idx) => (
+                    <span
+                      key={idx}
+                      className="absolute top-1/2 left-1/2 w-1.5 h-1.5 rounded-full bg-amber-800 shadow-xs animate-crumb-fly"
+                      style={
+                        {
+                          '--cx': c.cx,
+                          '--cy': c.cy,
+                          animationDelay: `${idx * 45}ms`,
+                        } as React.CSSProperties
+                      }
+                    />
+                  ))}
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-rose-500 text-xs font-bold animate-heart-float">
                     ♥
                   </span>
-                  <span
-                    className="absolute -top-1 left-2 text-amber-500 text-[10px] font-bold animate-heart-float pointer-events-none z-40"
-                    style={{ animationDelay: '0.16s' }}
-                  >
-                    ✦
-                  </span>
-                </>
+                </div>
               )}
             </div>
           ) : isPopped ? (
-            /* POPPED STATES FOR FOIL THEMES */
             isCatPeek ? (
-              /* THEME 2: PEEKING KITTEN OUT OF TORN FOIL! */
+              /* LIVELY ANIMATED PEEKING KITTEN WITH DUAL EXPRESSION & STAGGERED WIGGLE! */
               <div
-                className={`relative w-[116%] h-[116%] rounded-full flex items-center justify-center pointer-events-none ${
-                  isJustPopping ? 'animate-cat-peek' : ''
+                className={`relative w-[118%] h-[118%] rounded-full flex items-center justify-center pointer-events-none ${
+                  isJustPopping
+                    ? 'animate-cat-peek'
+                    : isKittenHappy
+                    ? 'animate-kitten-joy'
+                    : 'animate-kitten-alive'
                 }`}
+                style={
+                  !isJustPopping && !isKittenHappy
+                    ? { animationDelay: kittenDelaySec }
+                    : undefined
+                }
               >
                 <img
-                  src={`/assets/cat-peek-${catVariantIdx}.png`}
+                  src={
+                    isKittenHappy
+                      ? `/assets/cat-peek-happy-${catVariantIdx}.png`
+                      : `/assets/cat-peek-${catVariantIdx}.png`
+                  }
                   alt=""
                   draggable={false}
                   className="w-full h-full object-cover rounded-full pointer-events-none drop-shadow-xs"
                 />
+                {isKittenHappy && (
+                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-rose-500 text-[11px] font-bold animate-heart-float">
+                    ♥
+                  </span>
+                )}
                 <span
                   className={`absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full border border-white shadow-sm ${
                     status === 'late' ? 'bg-amber-400' : 'bg-emerald-400'
@@ -564,7 +711,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 />
               </div>
             ) : isRoseGold ? (
-              /* THEME 4: ROSEGOLD CHERRY BLOSSOM BLOOM */
               <div
                 className={`relative w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#6b263d] via-[#4a1829] to-[#2e0e19] shadow-inner border border-rose-200/80 ${
                   isJustPopping ? 'animate-cavity-reveal' : ''
@@ -594,7 +740,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 />
               </div>
             ) : (
-              /* THEME 1: CLASSIC PHOTOREALISTIC TORN ALUMINUM FOIL CAVITY */
               <div
                 className={`relative w-full h-full rounded-full overflow-hidden ${
                   isJustPopping ? 'animate-cavity-reveal' : ''
@@ -617,7 +762,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               </div>
             )
           ) : isBackView ? (
-            /* BACK FOIL VIEW */
             <div
               className={`relative w-full h-full rounded-full flex flex-col items-center justify-center border border-slate-400/60 shadow-inner transition-all ${
                 isPressing ? 'brightness-90 scale-95' : ''
@@ -638,7 +782,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               )}
             </div>
           ) : (
-            /* INTACT FRONT VIEW — 3D Sugar-Coated Pill inside Glossy Clear PVC Dome */
             <div
               className={`relative w-full h-full rounded-full flex items-center justify-center transition-all duration-150 ${
                 isPressing ? 'brightness-95' : ''
@@ -658,7 +801,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               >
                 <span className="absolute top-[16%] left-[20%] w-[34%] h-[22%] rounded-full bg-white/85 blur-[0.6px] -rotate-25" />
                 {isCatPeek && !pill.isPlacebo && (
-                  /* Tiny subtle embossed paw dot inside Cat Peek intact pill */
                   <svg viewBox="0 0 24 24" className="w-3 h-3 text-rose-400/55 fill-current">
                     <circle cx="8" cy="9" r="2" />
                     <circle cx="12" cy="7.5" r="2" />
@@ -676,7 +818,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             </div>
           )}
 
-          {/* POP ANIMATION LAYERS (for foil themes) */}
           {isJustPopping && !isCatBowl && (
             <>
               <span className="absolute inset-[-6px] rounded-full border-2 border-white/90 bg-white/40 animate-foil-burst pointer-events-none z-20" />
@@ -688,11 +829,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                     '0 6px 14px rgba(15,23,42,0.35), inset 0 2px 2px rgba(255,255,255,0.9)',
                 }}
               />
-              {isCatPeek && (
-                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-rose-500 text-xs font-bold animate-heart-float pointer-events-none z-30">
-                  ♥
-                </span>
-              )}
               {[
                 { tx: '-20px', ty: '-22px' },
                 { tx: '22px', ty: '-18px' },
@@ -714,22 +850,20 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             </>
           )}
 
-          {/* Today tiny floating tag */}
           {pill.isToday && !isPopped && (
-            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-1.5 py-[1px] rounded-full bg-[#D94E6A] text-white text-[8px] font-bold tracking-wider uppercase shadow-sm whitespace-nowrap z-10 pointer-events-none">
+            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-1.5 py-[1px] rounded-full app-accent-bg text-white text-[8px] font-bold tracking-wider uppercase shadow-sm whitespace-nowrap z-10 pointer-events-none">
               Heute
             </span>
           )}
         </button>
 
-        {/* Pill day number underneath */}
         {config.showNumbers && (
           <span
             className={`text-[9px] mt-2 font-medium leading-none select-none ${
               pill.isToday && !isPopped
                 ? 'opacity-0'
                 : pill.isToday
-                ? 'text-[#C23153] font-bold'
+                ? 'app-accent-text font-bold'
                 : isMissed && !isPopped
                 ? 'text-amber-700 font-semibold'
                 : isCatBowl
@@ -746,7 +880,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
 
   const useOvalLayout = config.shape === 'oval' && pills.length <= 28;
 
-  // Choose card surface class by theme
   const surfaceClass = isCatBowl
     ? 'blister-catbowl-surface border-amber-200/80'
     : isRoseGold
@@ -755,47 +888,44 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     ? 'blister-back-surface border-white/80'
     : 'blister-card-surface border-white/80';
 
+  const schemaTag = `${config.activePills}${
+    config.placeboPills > 0
+      ? `+${config.placeboPills}`
+      : config.pauseDays > 0
+      ? `+${config.pauseDays}`
+      : ''
+  }`;
+
   return (
     <div className="w-full flex flex-col items-center">
-      {/* QUICK 1-TAP DESIGN THEME SWITCHER */}
-      <div className="w-full flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2.5 px-0.5">
-        {BLISTER_THEMES.map((t) => {
-          const Icon = THEME_ICONS[t.id];
-          const active = theme === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => {
-                triggerHaptic(hapticsEnabled, 'light');
-                onChangeTheme(t.id);
-              }}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition active:scale-95 ${
-                active
-                  ? 'bg-[#D94E6A] text-white border-[#D94E6A] shadow-sm shadow-rose-200'
-                  : 'bg-white/90 text-slate-600 border-rose-100 hover:border-rose-300'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {t.shortLabel}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Top Action Bar for Blister */}
-      <div className="w-full flex items-center justify-between gap-2 mb-2.5 px-1">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/85 border border-rose-100 text-xs font-semibold text-rose-900 shadow-xs truncate max-w-[135px] whitespace-nowrap">
-            <Sparkles className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-            <span className="truncate">{config.brandName || 'Mein Blister'}</span>
-          </span>
-          <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
-            {poppedCount}/{totalPhysicalPills} {isCatBowl ? 'leer' : ''}
-          </span>
+      {/* Slim Design Switcher + Controls */}
+      <div className="w-full flex items-center justify-between gap-1.5 mb-2.5">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          {BLISTER_THEMES.map((t) => {
+            const Icon = THEME_ICONS[t.id];
+            const active = theme === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  triggerHaptic(hapticsEnabled, 'light');
+                  onChangeTheme(t.id);
+                }}
+                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition active:scale-95 ${
+                  active
+                    ? 'app-accent-bg text-white shadow-xs'
+                    : 'bg-white/90 text-slate-600 border-rose-100'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {t.shortLabel}
+              </button>
+            );
+          })}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           {!isCatBowl && (
             <button
               type="button"
@@ -803,32 +933,32 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 triggerHaptic(hapticsEnabled, 'light');
                 setIsBackView((v) => !v);
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-xs transition active:scale-95"
-              title="Blister umdrehen (Vorder-/Rückseite)"
+              className="w-8 h-8 rounded-xl bg-white/90 border border-slate-200/80 text-slate-600 flex items-center justify-center active:scale-95 transition"
+              title="Umdrehen"
+              aria-label="Blister umdrehen"
             >
               <RotateCw
                 className={`w-3.5 h-3.5 transition-transform duration-300 ${
-                  isBackView ? 'rotate-180 text-rose-500' : ''
+                  isBackView ? 'rotate-180 app-accent-text' : ''
                 }`}
               />
-              {isBackView ? 'Vorne' : 'Rückseite'}
             </button>
           )}
-
           <button
             type="button"
             onClick={onOpenCustomizer}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200/80 text-xs font-semibold text-rose-700 shadow-xs transition active:scale-95"
+            className="w-8 h-8 rounded-xl app-accent-soft border flex items-center justify-center active:scale-95 transition"
+            title="Blister anpassen"
+            aria-label="Blister anpassen"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
-            Größe
           </button>
         </div>
       </div>
 
-      {/* Multi-sheet selector for 84+7 Long-Cycle Blister */}
+      {/* Multi-sheet selector for 84+7 */}
       {isMultiSheet && (
-        <div className="w-full flex items-center justify-center gap-2 mb-3">
+        <div className="w-full flex items-center justify-center gap-2 mb-2.5">
           {Array.from({ length: totalSheets }, (_, idx) => (
             <button
               key={idx}
@@ -836,67 +966,53 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               onClick={() => setActiveBlock(idx)}
               className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
                 currentSheet === idx
-                  ? 'bg-[#D94E6A] text-white shadow-sm'
+                  ? 'app-accent-bg text-white shadow-sm'
                   : 'bg-white text-slate-600 border border-slate-200'
               }`}
             >
-              Monat {idx + 1} ({idx * sheetSize + 1}–
-              {Math.min((idx + 1) * sheetSize, totalPhysicalPills)})
+              Monat {idx + 1}
             </button>
           ))}
         </div>
       )}
 
-      {/* THE INTERACTIVE BLISTER CARD */}
+      {/* THE BLISTER CARD */}
       <div className="w-full perspective-1200">
         <div
           ref={cardRef}
           className={`relative w-full transition-all duration-500 ${surfaceClass} ${
             useOvalLayout
-              ? 'rounded-[46px] px-4 py-6'
+              ? 'rounded-[44px] px-4 py-6'
               : config.shape === 'compact'
               ? 'rounded-[22px] px-3 py-4'
-              : 'rounded-[28px] px-3.5 py-5 sm:px-5 sm:py-6'
+              : 'rounded-[28px] px-3.5 py-5 sm:px-5 sm:py-5'
           } border overflow-hidden`}
         >
-          {/* Top card stamp / header */}
-          <div className="absolute top-2.5 left-3.5 right-3.5 flex items-center justify-between pointer-events-none select-none opacity-75">
+          {/* Top Bar inside Card (extra lounge headroom when Cat Bowl has 0 eaten so Mimi rests cleanly above Bowl #1) */}
+          <div
+            className={`relative z-10 flex items-center justify-between text-[10px] font-semibold opacity-75 px-0.5 select-none ${
+              isCatBowl && poppedCount === 0 ? 'mb-9' : 'mb-3'
+            }`}
+          >
             <span
-              className={`text-[9px] font-mono tracking-widest uppercase font-bold ${
+              className={
                 isCatBowl ? 'text-amber-900' : isRoseGold ? 'text-rose-900' : 'text-slate-600'
-              }`}
+              }
             >
-              {isCatBowl
-                ? 'KATZEN-FUTTERPLATZ'
-                : isCatPeek
-                ? 'KATZEN-BLISTER'
-                : config.brandName || 'LUNEA'}{' '}
-              • {config.activePills}
-              {config.placeboPills > 0
-                ? `+${config.placeboPills}`
-                : config.pauseDays > 0
-                ? `+${config.pauseDays}P`
-                : ''}
+              {config.brandName.trim() ? `${config.brandName.trim()} • ${schemaTag}` : schemaTag}
             </span>
             <span
-              className={`text-[8.5px] font-mono tracking-wider ${
-                isCatBowl ? 'text-amber-800' : isRoseGold ? 'text-rose-800' : 'text-slate-500'
-              }`}
+              className={
+                isCatBowl ? 'text-amber-900' : isRoseGold ? 'text-rose-900' : 'text-slate-600'
+              }
             >
-              {isCatBowl
-                ? 'TIPPE AUF EINEN NAPF'
-                : isCatPeek
-                ? 'DRÜCK MICH!'
-                : isBackView
-                ? 'DRÜCKFOLIE • RÜCKSEITE'
-                : 'CH.-B. 26L04'}
+              {poppedCount}/{totalPhysicalPills}
             </span>
           </div>
 
-          {/* Subtle diagonal metallic light sheen for foil themes */}
           {!isCatBowl && (
             <div
-              className="absolute inset-0 pointer-events-none opacity-35"
+              className="absolute inset-0 pointer-events-none opacity-30"
               style={{
                 background:
                   'linear-gradient(122deg, transparent 18%, rgba(255,255,255,0.75) 36%, transparent 50%, rgba(255,255,255,0.3) 78%, transparent 92%)',
@@ -904,7 +1020,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             />
           )}
 
-          {/* Pawprint trail overlay when cat walks across bowls */}
+          {/* Pawprint trail overlay */}
           {isCatBowl &&
             pawPrints.map((pp) => (
               <svg
@@ -924,27 +1040,25 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               </svg>
             ))}
 
-          {/* BLISTER POCKET LAYOUT */}
+          {/* POCKET LAYOUT */}
           {useOvalLayout ? (
-            <div className="relative z-10 mt-5 mb-2 flex items-center justify-center">
-              <div className="relative w-[308px] h-[308px] sm:w-[336px] sm:h-[336px]">
+            <div className="relative z-10 my-2 flex items-center justify-center">
+              <div className="relative w-[304px] h-[304px] sm:w-[332px] sm:h-[332px]">
                 <div
-                  className={`absolute inset-[54px] rounded-full border border-dashed flex flex-col items-center justify-center text-center p-4 shadow-inner ${
+                  className={`absolute inset-[56px] rounded-full border border-dashed flex flex-col items-center justify-center text-center p-4 shadow-inner ${
                     isCatBowl
                       ? 'border-amber-400/50 bg-white/55'
                       : 'border-slate-500/35 bg-white/25 backdrop-blur-[1px]'
                   }`}
                 >
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">
-                    {isCatBowl ? 'Futter-Kreis' : 'Zyklus-Blister'}
+                  <span className="text-xl font-bold text-slate-800">
+                    {poppedCount}/{totalPhysicalPills}
                   </span>
-                  <span className="text-xl font-bold text-slate-800 mt-0.5">
-                    {poppedCount} / {totalPhysicalPills}
-                  </span>
-                  <span className="text-[11px] text-slate-600 mt-0.5">{config.brandName}</span>
-                  <span className="text-[9px] text-rose-600 font-semibold mt-1.5">
-                    {isCatBowl ? 'Tippe auf einen Napf' : 'Tippe auf eine Pille'}
-                  </span>
+                  {config.brandName.trim() && (
+                    <span className="text-[11px] text-slate-600 mt-0.5 truncate max-w-full">
+                      {config.brandName.trim()}
+                    </span>
+                  )}
                 </div>
 
                 {pills.map((pill, idx) => {
@@ -965,7 +1079,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               </div>
             </div>
           ) : (
-            <div className="relative z-10 mt-5 space-y-3.5">
+            <div className="relative z-10 space-y-3.5">
               {rows.map((row, rowIdx) => (
                 <div key={row.rowIdx} className="relative">
                   {rowIdx > 0 && (
@@ -973,14 +1087,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                       className={`w-full border-t border-dashed mb-3 relative ${
                         isCatBowl ? 'border-amber-300/60' : 'border-slate-500/28'
                       }`}
-                    >
-                      {!isCatBowl && (
-                        <>
-                          <span className="absolute -left-4 -top-1.5 w-3 h-3 rounded-full bg-[#faf6f5]/60 border border-slate-400/30" />
-                          <span className="absolute -right-4 -top-1.5 w-3 h-3 rounded-full bg-[#faf6f5]/60 border border-slate-400/30" />
-                        </>
-                      )}
-                    </div>
+                    />
                   )}
 
                   <div
@@ -1055,16 +1162,22 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             </div>
           )}
 
-          {/* LIVE ANIMATED WALKING & EATING CAT CHARACTER (for Cat Bowl theme) */}
+          {/* LIVE MULTI-FRAME WALKING & REAL EATING CAT! */}
           {isCatBowl && catPos && (
             <button
               type="button"
               onClick={() => {
                 playCatPeekSound(soundEnabled);
                 triggerHaptic(hapticsEnabled, 'light');
+                setCatPhase('happy');
+                setShowCatTag(true);
+                window.setTimeout(() => {
+                  setCatPhase((cur) => (cur === 'happy' ? 'idle' : cur));
+                  setShowCatTag(false);
+                }, 1500);
               }}
-              aria-label="Futterkatze streicheln"
-              className="absolute z-30 w-14 h-14 -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
+              aria-label={walkerName}
+              className="absolute z-30 w-15 h-15 -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
               style={{
                 left: `${catPos.x}px`,
                 top: `${catPos.y}px`,
@@ -1073,91 +1186,50 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
-              {/* Soft ground shadow beneath cat */}
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-9 h-2.5 rounded-full bg-amber-950/20 blur-[2px] pointer-events-none" />
-
-              {/* Flip wrapper so cat faces movement direction */}
+              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-10 h-2.5 rounded-full bg-amber-950/20 blur-[2px] pointer-events-none" />
               <div
-                className="w-full h-full transition-transform duration-200"
+                className="w-full h-full transition-transform duration-150"
                 style={{
                   transform: catFacing === 'right' ? 'scaleX(-1)' : 'scaleX(1)',
                 }}
               >
                 <img
-                  src="/assets/cat-walker.png"
-                  alt="Katze"
+                  src={catSpriteSrc}
+                  alt={walkerName}
                   draggable={false}
                   className={`w-full h-full object-contain drop-shadow-md pointer-events-none ${
-                    catState === 'walking'
+                    catPhase === 'walking'
                       ? 'animate-cat-trot'
-                      : catState === 'eating'
+                      : catPhase === 'eating'
                       ? 'animate-cat-munch'
+                      : catPhase === 'happy'
+                      ? 'animate-kitten-joy'
                       : 'animate-cat-idle'
                   }`}
                 />
               </div>
 
-              {/* Tiny cute speech badge while munching */}
-              {catState === 'eating' && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-white/95 border border-rose-200 text-[9px] font-extrabold text-rose-600 shadow-sm whitespace-nowrap pointer-events-none">
-                  Mampf!
+              {(catPhase === 'eating' || catPhase === 'happy' || showCatTag) && (
+                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-white/95 border border-rose-200 text-[9px] font-extrabold text-rose-600 shadow-sm whitespace-nowrap pointer-events-none">
+                  {catPhase === 'eating'
+                    ? `${walkerName} mampft!`
+                    : catPhase === 'happy'
+                    ? `${walkerName} ♥ lecker!`
+                    : `${walkerName} ♥`}
                 </span>
               )}
             </button>
           )}
-
-          {/* Card Footer Strip */}
-          <div
-            className={`relative z-10 mt-5 pt-2.5 border-t flex items-center justify-between text-[10px] ${
-              isCatBowl
-                ? 'border-amber-300/45 text-amber-900/80'
-                : isRoseGold
-                ? 'border-rose-400/30 text-rose-950/80'
-                : 'border-slate-500/20 text-slate-600/85'
-            }`}
-          >
-            <span className="flex items-center gap-1.5">
-              {isCatBowl ? (
-                <span>
-                  {totalPhysicalPills - poppedCount} volle Näpfe • {poppedCount} leergefressen
-                </span>
-              ) : (
-                <>
-                  <span
-                    className="w-2.5 h-2.5 rounded-full border border-slate-400/60"
-                    style={{ background: PILL_COLORS[config.activeColor].gradient }}
-                  />
-                  {config.activePills} Wirkstoff
-                  {config.placeboPills > 0 && (
-                    <>
-                      <span className="mx-0.5 opacity-50">•</span>
-                      <span
-                        className="w-2.5 h-2.5 rounded-full border border-slate-400/60"
-                        style={{ background: PILL_COLORS[config.placeboColor].gradient }}
-                      />
-                      {config.placeboPills} Placebo
-                    </>
-                  )}
-                </>
-              )}
-            </span>
-            <span className="font-mono text-[9px] opacity-80">
-              Start: {formatDateShort(config.packStartDate)}
-            </span>
-          </div>
         </div>
       </div>
 
       {/* PILL-FREE PAUSE STRIP */}
       {pauseDaysList.length > 0 && (
-        <div className="w-full mt-3.5 rounded-2xl bg-gradient-to-r from-violet-50/90 via-rose-50/70 to-violet-50/90 border border-violet-200/70 p-3.5 shadow-xs">
+        <div className="w-full mt-3 rounded-2xl bg-white/85 border border-violet-200/70 p-3 shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-violet-900 flex items-center gap-1.5">
-              <Droplets className="w-3.5 h-3.5 text-rose-500" />
-              Einnahmepause ({config.pauseDays} Tage • ohne Pille)
-            </span>
-            <span className="text-[11px] font-medium text-violet-700">
-              Abbruchblutung erwartet
+              <Droplets className="w-3.5 h-3.5 app-accent-text" />
+              Pause ({config.pauseDays} Tage)
             </span>
           </div>
           <div className="grid grid-cols-7 gap-1.5">
@@ -1166,10 +1238,10 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 key={p.pauseNum}
                 className={`flex flex-col items-center py-1.5 rounded-xl border text-center transition ${
                   p.isToday
-                    ? 'bg-[#D94E6A] text-white border-[#D94E6A] shadow-sm'
+                    ? 'app-accent-bg text-white shadow-xs'
                     : p.isPast
                     ? 'bg-violet-100/80 text-violet-800 border-violet-200'
-                    : 'bg-white/75 text-slate-600 border-violet-100'
+                    : 'bg-slate-50 text-slate-600 border-violet-100'
                 }`}
               >
                 <span className="text-[10px] font-bold leading-none">{p.weekday}</span>
@@ -1180,21 +1252,16 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
         </div>
       )}
 
-      {/* START NEW BLISTER BANNER WHEN PACK COMPLETE */}
+      {/* PACK COMPLETE BANNER */}
       {isPackFinished && (
-        <div className="w-full mt-3.5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 text-white p-4 shadow-md flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold">
-              {isCatBowl ? 'Alle Näpfe leergefressen!' : 'Blister abgeschlossen!'}
-            </p>
-            <p className="text-xs text-rose-100 mt-0.5">
-              Bereit für deinen nächsten Blister? Alte Daten bleiben im Verlauf erhalten.
-            </p>
-          </div>
+        <div className="w-full mt-3 rounded-2xl app-accent-gradient text-white p-3.5 shadow-md flex items-center justify-between gap-3">
+          <p className="text-sm font-bold">
+            {isCatBowl ? 'Alle Näpfe leer!' : 'Blister fertig!'}
+          </p>
           <button
             type="button"
             onClick={onStartNewPack}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white text-rose-600 text-xs font-bold shadow-sm hover:bg-rose-50 active:scale-95 transition"
+            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white app-accent-text text-xs font-bold shadow-sm active:scale-95 transition"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Neuer Blister
@@ -1213,19 +1280,35 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-rose-500">
-                  {isCatBowl ? 'Napf' : 'Pille'} #{selectedPill.dayIndex + 1} •{' '}
-                  {selectedPill.isPlacebo ? 'Placebo' : 'Wirkstoff'}
-                </span>
-                <h3 className="text-lg font-bold text-slate-900 mt-0.5">
-                  {getWeekdayShort(selectedPill.date)}, {formatDateShort(selectedPill.date)}
-                </h3>
+              <div className="flex items-center gap-2.5">
+                {isCatPeek &&
+                  (selectedPill.entry?.status === 'taken' ||
+                    selectedPill.entry?.status === 'late') && (
+                    <img
+                      src={`/assets/cat-peek-happy-${selectedPill.dayIndex % 4}.png`}
+                      alt=""
+                      className="w-11 h-11 rounded-full object-cover border border-rose-100 animate-kitten-joy"
+                    />
+                  )}
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider app-accent-text">
+                    {isCatPeek &&
+                    (selectedPill.entry?.status === 'taken' ||
+                      selectedPill.entry?.status === 'late')
+                      ? `${getPeekCatName(selectedPill.dayIndex, catNames)} • #${selectedPill.dayIndex + 1}`
+                      : `${isCatBowl ? 'Napf' : 'Pille'} #${selectedPill.dayIndex + 1}${
+                          selectedPill.isPlacebo ? ' • Placebo' : ''
+                        }`}
+                  </span>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {getWeekdayShort(selectedPill.date)}, {formatDateShort(selectedPill.date)}
+                  </h3>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedPill(null)}
-                className="p-1.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                className="p-1.5 rounded-full bg-slate-100 text-slate-500"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1233,21 +1316,21 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
 
             {selectedPill.entry?.status === 'taken' || selectedPill.entry?.status === 'late' ? (
               <div className="mt-4 space-y-3">
-                <div className="rounded-2xl bg-emerald-50 border border-emerald-200/70 p-3.5 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                    <Check className="w-5 h-5" />
+                <div className="rounded-2xl bg-emerald-50 border border-emerald-200/70 p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                    <Check className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-emerald-950">
+                    <p className="text-xs font-bold text-emerald-950">
                       {selectedPill.entry.status === 'late'
-                        ? 'Verspätet eingenommen'
+                        ? 'Verspätet'
                         : isCatBowl
-                        ? 'Napf pünktlich leergefressen'
-                        : 'Pünktlich ausgedrückt'}
+                        ? `${walkerName} hat gefressen`
+                        : 'Genommen'}
                     </p>
-                    <p className="text-xs text-emerald-800 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      Uhrzeit: {formatTimeFromIso(selectedPill.entry.takenAt)}
+                    <p className="text-[11px] text-emerald-800 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatTimeFromIso(selectedPill.entry.takenAt)}
                     </p>
                   </div>
                 </div>
@@ -1259,10 +1342,10 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                       onUndoPill(selectedPill.date);
                       setSelectedPill(null);
                     }}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold"
                   >
                     <Undo2 className="w-3.5 h-3.5" />
-                    {isCatBowl ? 'Wieder auffüllen' : 'Rückgängig machen'}
+                    {isCatBowl ? 'Auffüllen' : 'Rückgängig'}
                   </button>
                   <button
                     type="button"
@@ -1270,20 +1353,19 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                       onMarkMissed(selectedPill.dayIndex, selectedPill.date);
                       setSelectedPill(null);
                     }}
-                    className="py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition"
+                    className="py-2.5 px-3 rounded-xl bg-amber-50 text-amber-800 text-xs font-bold"
                   >
-                    Als vergessen
+                    Vergessen
                   </button>
                 </div>
               </div>
             ) : (
               <div className="mt-4 space-y-3">
-                <div className="rounded-2xl bg-amber-50 border border-amber-200/80 p-3.5 flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-900 leading-relaxed">
-                    {isCatBowl
-                      ? `Dieser Napf ist erst für den ${formatDateShort(selectedPill.date)} gedacht. Soll die Katze trotzdem schon hinlaufen?`
-                      : `Diese Pille ist erst für den ${formatDateShort(selectedPill.date)} vorgesehen. Möchtest du sie trotzdem jetzt ausdrücken?`}
+                <div className="rounded-2xl bg-amber-50 border border-amber-200/80 p-3 flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-xs text-amber-900">
+                    Erst am <strong>{formatDateShort(selectedPill.date)}</strong> fällig. Trotzdem
+                    jetzt?
                   </p>
                 </div>
 
@@ -1302,9 +1384,9 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                       setSelectedPill(null);
                       executePop(target.dayIndex, target.date, target.isPlacebo);
                     }}
-                    className="flex-1 py-2.5 rounded-xl bg-[#D94E6A] text-white text-xs font-bold shadow-sm hover:bg-[#c23b57]"
+                    className="flex-1 py-2.5 rounded-xl app-accent-bg text-white text-xs font-bold shadow-sm"
                   >
-                    {isCatBowl ? 'Katze füttern!' : 'Trotzdem ausdrücken'}
+                    {isCatBowl ? `${walkerName} füttern` : 'Ausdrücken'}
                   </button>
                 </div>
               </div>

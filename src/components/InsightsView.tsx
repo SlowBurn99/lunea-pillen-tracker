@@ -368,35 +368,39 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ state }) => {
         </div>
       )}
 
-      {/* Pack History */}
-      <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-2.5">
-        <span className="text-xs font-bold text-slate-800">Blister-Verlauf</span>
-        <div className="space-y-2">
-          {state.history.map((pack) => (
-            <div
-              key={pack.id}
-              className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100"
-            >
-              <div>
-                <p className="text-xs font-bold text-slate-800">{pack.brandName}</p>
-                <p className="text-[11px] text-slate-500">
-                  {formatDateShort(pack.startDate)} – {formatDateShort(pack.endDate)}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
-                  {pack.takenCount}/{pack.totalPills} pünktlich
-                </span>
-                {pack.lateCount > 0 && (
-                  <p className="text-[10px] text-amber-600 font-medium mt-0.5">
-                    {pack.lateCount}× verspätet
+      {/* Pack History — only show if there are archived packs */}
+      {state.history.length > 0 && (
+        <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-2.5">
+          <span className="text-xs font-bold text-slate-800">Blister-Verlauf</span>
+          <div className="space-y-2">
+            {state.history.map((pack) => (
+              <div
+                key={pack.id}
+                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100"
+              >
+                <div>
+                  <p className="text-xs font-bold text-slate-800">
+                    {pack.brandName || 'Blister'}
                   </p>
-                )}
+                  <p className="text-[11px] text-slate-500">
+                    {formatDateShort(pack.startDate)} – {formatDateShort(pack.endDate)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                    {pack.takenCount}/{pack.totalPills} pünktlich
+                  </span>
+                  {pack.lateCount > 0 && (
+                    <p className="text-[10px] text-amber-600 font-medium mt-0.5">
+                      {pack.lateCount}× verspätet
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

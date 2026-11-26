@@ -81,7 +81,7 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Hero Alarm Clock Card */}
-      <div className="rounded-3xl bg-gradient-to-br from-[#D94E6A] via-[#C93D5E] to-[#A52E50] text-white p-5 shadow-lg relative overflow-hidden">
+      <div className="rounded-3xl app-accent-gradient text-white p-5 shadow-lg relative overflow-hidden">
         <div className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
 
         <div className="flex items-start justify-between relative z-10">
@@ -149,14 +149,12 @@ export const AlarmView: React.FC<AlarmViewProps> = ({
           </div>
           <div>
             <p className="text-xs font-bold text-slate-900">
-              {permState === 'granted'
-                ? 'Benachrichtigungen aktiv'
-                : 'Push-Benachrichtigungen erlauben'}
+              {permState === 'granted' ? 'Benachrichtigungen aktiv' : 'Benachrichtigungen erlauben'}
             </p>
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+            <p className="text-[11px] text-slate-500 mt-0.5">
               {permState === 'granted'
-                ? 'Du erhältst Erinnerungen im Browser & später nativ auf iOS/Android.'
-                : 'Erlaube Benachrichtigungen, damit der Wecker auch im Hintergrund meldet.'}
+                ? 'Erinnerungen sind eingeschaltet.'
+                : 'Für pünktliche Wecker-Meldungen.'}
             </p>
           </div>
         </div>

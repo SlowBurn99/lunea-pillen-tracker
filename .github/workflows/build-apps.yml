@@ -1,4 +1,4 @@
-name: Build Lunea (Android APK & iOS IPA)
+name: Build Pille (Android APK & iOS IPA)
 
 on:
   push:
@@ -46,13 +46,13 @@ jobs:
       - name: Prepare APK artifact
         run: |
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Lunea-Android.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Pille-Android.apk
 
-      - name: Upload Lunea-Android.apk
+      - name: Upload Pille-Android.apk
         uses: actions/upload-artifact@v4
         with:
-          name: Lunea-Android-APK
-          path: artifacts/Lunea-Android.apk
+          name: Pille-Android-APK
+          path: artifacts/Pille-Android.apk
           retention-days: 30
 
   build-ios-unsigned:
@@ -102,13 +102,13 @@ jobs:
           mkdir -p artifacts/Payload
           cp -r ios/App/build/Build/Products/Release-iphoneos/App.app artifacts/Payload/
           cd artifacts
-          zip -qry Lunea-iOS-unsigned.ipa Payload
+          zip -qry Pille-iOS-unsigned.ipa Payload
 
-      - name: Upload Lunea-iOS-unsigned.ipa
+      - name: Upload Pille-iOS-unsigned.ipa
         uses: actions/upload-artifact@v4
         with:
-          name: Lunea-iOS-IPA
-          path: artifacts/Lunea-iOS-unsigned.ipa
+          name: Pille-iOS-IPA
+          path: artifacts/Pille-iOS-unsigned.ipa
           retention-days: 30
 
       - name: Publish iOS IPA to GitHub Release
@@ -116,9 +116,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view latest-build >/dev/null 2>&1; then
-            gh release upload latest-build artifacts/Lunea-iOS-unsigned.ipa --clobber
+            gh release upload latest-build artifacts/Pille-iOS-unsigned.ipa --clobber
           else
-            gh release create latest-build artifacts/Lunea-iOS-unsigned.ipa \
-              --title "Lunea Build" \
+            gh release create latest-build artifacts/Pille-iOS-unsigned.ipa \
+              --title "Pille Build" \
               --notes "Automatischer Build (Android APK & unsignierte iOS IPA fuer Sideloading)"
           fi

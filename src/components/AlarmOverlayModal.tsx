@@ -37,7 +37,7 @@ export const AlarmOverlayModal: React.FC<AlarmOverlayModalProps> = ({
         </div>
 
         <span className="inline-block mt-4 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-[11px] font-bold tracking-wider uppercase">
-          {alarm.time} Uhr • {brandName}
+          {alarm.time} Uhr{brandName ? ` • ${brandName}` : ''}
         </span>
 
         <h2 className="text-xl font-extrabold text-slate-900 mt-2">{title}</h2>

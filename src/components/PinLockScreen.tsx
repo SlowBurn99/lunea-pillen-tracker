@@ -34,7 +34,7 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({ expectedPin, onUnl
       <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-[#F26B8A] to-[#C23A5C] text-white flex items-center justify-center shadow-lg mb-4">
         <Lock className="w-7 h-7" />
       </div>
-      <h1 className="text-xl font-bold text-slate-900">Lunea entsperren</h1>
+      <h1 className="text-xl font-bold text-slate-900">Pille entsperren</h1>
       <p className="text-xs text-slate-500 mt-1">Gib deinen 4-stelligen Privatsphäre-PIN ein</p>
 
       <div className="flex gap-3.5 my-7">

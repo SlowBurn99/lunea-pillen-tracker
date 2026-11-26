@@ -81,6 +81,16 @@ export interface AlarmConfig {
   refillThresholdDays: number;
 }
 
+export type AppColorThemeId = 'rose' | 'lavender' | 'sage' | 'peach' | 'sky' | 'midnight';
+
+export interface CatNames {
+  walker: string;
+  peek0: string;
+  peek1: string;
+  peek2: string;
+  peek3: string;
+}
+
 export interface AppSettings {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
@@ -88,6 +98,8 @@ export interface AppSettings {
   pinCode: string;
   packsInStock: number;
   pressToPopMode: 'tap' | 'hold';
+  catNames: CatNames;
+  appColor: AppColorThemeId;
 }
 
 export interface ArchivedPack {

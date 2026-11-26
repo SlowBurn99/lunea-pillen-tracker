@@ -1,15 +1,17 @@
 import React from 'react';
 import { Moon, Flower2 } from 'lucide-react';
-import type { AvatarId } from '../types';
+import type { AvatarId, CatNames } from '../types';
 
-export const AVATAR_OPTIONS: Array<{ id: AvatarId; label: string }> = [
-  { id: 'cat0', label: 'Tiger' },
-  { id: 'cat1', label: 'Grau' },
-  { id: 'cat2', label: 'Glück' },
-  { id: 'cat3', label: 'Tuxedo' },
-  { id: 'moon', label: 'Mond' },
-  { id: 'flower', label: 'Blüte' },
-];
+export function getAvatarOptions(catNames?: CatNames): Array<{ id: AvatarId; label: string }> {
+  return [
+    { id: 'cat0', label: catNames?.peek0 || 'Katze 1' },
+    { id: 'cat1', label: catNames?.peek1 || 'Katze 2' },
+    { id: 'cat2', label: catNames?.peek2 || 'Katze 3' },
+    { id: 'cat3', label: catNames?.peek3 || 'Katze 4' },
+    { id: 'moon', label: 'Mond' },
+    { id: 'flower', label: 'Blüte' },
+  ];
+}
 
 interface ProfileAvatarProps {
   avatar: AvatarId;

@@ -1,4 +1,28 @@
-import type { BlisterConfig, BlisterPresetId, BlisterThemeId, PillColorKey } from '../types';
+import type {
+  AppColorThemeId,
+  BlisterConfig,
+  BlisterPresetId,
+  BlisterThemeId,
+  PillColorKey,
+} from '../types';
+
+export interface AppColorThemeMeta {
+  id: AppColorThemeId;
+  name: string;
+  swatch: string;
+  bg: string;
+  accent: string;
+  isDark?: boolean;
+}
+
+export const APP_COLOR_THEMES: AppColorThemeMeta[] = [
+  { id: 'rose', name: 'Rosé', swatch: '#D94E6A', bg: '#FAF6F5', accent: '#D94E6A' },
+  { id: 'lavender', name: 'Lavendel', swatch: '#7C5CE6', bg: '#F7F5FC', accent: '#7C5CE6' },
+  { id: 'sage', name: 'Salbei', swatch: '#2E8B6E', bg: '#F4F9F6', accent: '#2E8B6E' },
+  { id: 'peach', name: 'Pfirsich', swatch: '#DF6C46', bg: '#FCF6F2', accent: '#DF6C46' },
+  { id: 'sky', name: 'Himmel', swatch: '#3581C4', bg: '#F3F8FC', accent: '#3581C4' },
+  { id: 'midnight', name: 'Nacht', swatch: '#2B2230', bg: '#16131A', accent: '#F06A8A', isDark: true },
+];
 
 export interface BlisterThemeMeta {
   id: BlisterThemeId;
@@ -12,29 +36,29 @@ export const BLISTER_THEMES: BlisterThemeMeta[] = [
   {
     id: 'classic_foil',
     name: 'Alu Klassik',
-    shortLabel: 'Alu Klassik',
-    description: 'Realistische Apotheken-Alufolie mit 3D-Kuppeln & aufgerissener Folie.',
+    shortLabel: 'Klassik',
+    description: 'Realistische Alufolie mit 3D-Kuppeln.',
     accent: '#64748b',
   },
   {
     id: 'cat_peek',
     name: 'Katzen-Versteck',
     shortLabel: 'Katzen',
-    description: 'Aus jeder ausgedrückten Pille schaut ein süßes Kätzchen heraus!',
+    description: 'Nach dem Ausdrücken schaut ein Kätzchen heraus.',
     accent: '#ea580c',
   },
   {
     id: 'cat_bowl',
     name: 'Katzen-Napf',
-    shortLabel: 'Napf-Katze',
-    description: 'Jede Pille ist ein Napf – die Katze läuft hin und frisst ihn leer!',
+    shortLabel: 'Napf',
+    description: 'Deine Katze läuft zum Napf und frisst ihn leer.',
     accent: '#d94e6a',
   },
   {
     id: 'rosegold_bloom',
-    name: 'Roségold Blüte',
+    name: 'Roségold',
     shortLabel: 'Roségold',
-    description: 'Edle Roségold-Folie, bei der jede ausgedrückte Pille aufblüht.',
+    description: 'Roségold-Folie mit kleinen Blüten.',
     accent: '#be185d',
   },
 ];
@@ -51,12 +75,11 @@ export interface BlisterPresetMeta {
 export const BLISTER_PRESETS: BlisterPresetMeta[] = [
   {
     id: '21_7_pause',
-    name: '21 + 7 Pause (Klassisch)',
+    name: '21 + 7 Pause',
     shortLabel: '21+7',
-    examples: 'z. B. Maxim, Valette, Yasmin, Diane, Aristelle',
-    description: '21 wirkstoffhaltige Pillen im Blister, danach 7 Tage pillenfreie Pause.',
+    examples: '21 Pillen, 7 Tage Pause',
+    description: '21 Wirkstoffpillen + 7 Tage Pause.',
     defaults: {
-      brandName: 'Maxim 21',
       pillType: 'combined',
       activePills: 21,
       placeboPills: 0,
@@ -72,10 +95,9 @@ export const BLISTER_PRESETS: BlisterPresetMeta[] = [
     id: '24_4_placebo',
     name: '24 + 4 Placebo',
     shortLabel: '24+4',
-    examples: 'z. B. Yaz, Slinda, Zoely, Daylette',
-    description: '24 Wirkstoffpillen + 4 farbige Placebos durchgehend im 28er Blister.',
+    examples: '24 Wirkstoff, 4 Placebos',
+    description: '24 Wirkstoffpillen + 4 Placebos.',
     defaults: {
-      brandName: 'Yaz 24+4',
       pillType: 'combined',
       activePills: 24,
       placeboPills: 4,
@@ -89,12 +111,11 @@ export const BLISTER_PRESETS: BlisterPresetMeta[] = [
   },
   {
     id: '21_7_placebo',
-    name: '21 + 7 Placebo (28er)',
+    name: '21 + 7 Placebo',
     shortLabel: '21+7P',
-    examples: 'z. B. Leios 28, Microgynon ED',
-    description: '21 Wirkstoffpillen + 7 Placebos im Blister ohne Einnahmepause.',
+    examples: '21 Wirkstoff, 7 Placebos',
+    description: '21 Wirkstoffpillen + 7 Placebos.',
     defaults: {
-      brandName: 'Leios 28',
       pillType: 'combined',
       activePills: 21,
       placeboPills: 7,
@@ -108,12 +129,11 @@ export const BLISTER_PRESETS: BlisterPresetMeta[] = [
   },
   {
     id: '28_mini',
-    name: '28 Minipille (Durchgehend)',
-    shortLabel: '28 Mini',
-    examples: 'z. B. Cerazette, Desogestrel, Jubrele, Feanolla',
-    description: '28 Wirkstoffpillen durchgehend ohne Pause und ohne Placebos.',
+    name: '28 Durchgehend',
+    shortLabel: '28er',
+    examples: '28 Pillen ohne Pause',
+    description: '28 Wirkstoffpillen durchgehend.',
     defaults: {
-      brandName: 'Cerazette 28',
       pillType: 'minipill',
       activePills: 28,
       placeboPills: 0,
@@ -129,10 +149,9 @@ export const BLISTER_PRESETS: BlisterPresetMeta[] = [
     id: '84_7_long',
     name: '84 + 7 Langzyklus',
     shortLabel: '84+7',
-    examples: 'z. B. Seasonique, Langzyklus (3 Monate)',
-    description: '84 durchgehende Wirkstoffpillen über 12 Wochen + 7 Tage Pause.',
+    examples: '3 Monate + 7 Tage Pause',
+    description: '84 Pillen + 7 Tage Pause.',
     defaults: {
-      brandName: 'Langzyklus 84',
       pillType: 'combined',
       activePills: 84,
       placeboPills: 0,
@@ -146,10 +165,10 @@ export const BLISTER_PRESETS: BlisterPresetMeta[] = [
   },
   {
     id: 'custom',
-    name: 'Benutzerdefiniert',
+    name: 'Eigene Größe',
     shortLabel: 'Eigene',
-    examples: 'Individuelle Pillenzahl & Rastergröße',
-    description: 'Stelle Wirkstoffpillen, Placebos, Pause, Spalten & Form frei ein.',
+    examples: 'Frei einstellbar',
+    description: 'Eigene Pillenzahl & Raster.',
     defaults: {},
   },
 ];
