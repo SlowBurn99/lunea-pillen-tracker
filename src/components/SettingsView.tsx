@@ -15,8 +15,8 @@ import {
   ChevronUp,
   Palette,
 } from 'lucide-react';
-import type { AppColorThemeId, AppState, CatNames, UserProfile } from '../types';
-import { APP_COLOR_THEMES } from '../data/presets';
+import type { AppColorThemeId, AppState, BlisterThemeId, CatNames, UserProfile } from '../types';
+import { APP_COLOR_THEMES, BLISTER_THEMES } from '../data/presets';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ProfileForm } from './ProfileForm';
 import { formatDateGerman } from '../utils/date';
@@ -25,6 +25,7 @@ interface SettingsViewProps {
   state: AppState;
   onUpdateSettings: (patch: Partial<AppState['settings']>) => void;
   onUpdateProfile: (profile: UserProfile) => void;
+  onChangeTheme: (theme: BlisterThemeId) => void;
   onOpenCustomizer: () => void;
   onStartNewPack: () => void;
   onClearProgress: () => void;
@@ -35,6 +36,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   state,
   onUpdateSettings,
   onUpdateProfile,
+  onChangeTheme,
   onOpenCustomizer,
   onStartNewPack,
   onClearProgress,
@@ -183,28 +185,52 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Blister Quick Card */}
-      <button
-        type="button"
-        onClick={onOpenCustomizer}
-        className="w-full text-left bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs flex items-center justify-between active:scale-[0.99] transition"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-            <SlidersHorizontal className="w-5 h-5" />
+      {/* Blister Quick Card + Direct Design Picker in Settings */}
+      <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs space-y-3">
+        <button
+          type="button"
+          onClick={onOpenCustomizer}
+          className="w-full text-left flex items-center justify-between active:scale-[0.99] transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl app-accent-soft border flex items-center justify-center">
+              <SlidersHorizontal className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">Blister, Starttag & Design</p>
+              <p className="text-xs text-slate-500">
+                {state.blister.brandName ? `${state.blister.brandName} • ` : ''}
+                {state.blister.activePills}
+                {state.blister.placeboPills > 0 ? `+${state.blister.placeboPills} Placebo` : ''}
+                {state.blister.pauseDays > 0 ? `+${state.blister.pauseDays} Pause` : ''}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">Blister & Design</p>
-            <p className="text-xs text-slate-500">
-              {state.blister.brandName ? `${state.blister.brandName} • ` : ''}
-              {state.blister.activePills}
-              {state.blister.placeboPills > 0 ? `+${state.blister.placeboPills} Placebo` : ''}
-              {state.blister.pauseDays > 0 ? `+${state.blister.pauseDays} Pause` : ''}
-            </p>
-          </div>
+          <span className="text-xs font-bold app-accent-text">Anpassen</span>
+        </button>
+
+        {/* Direct 1-tap Blister Design Picker inside Settings */}
+        <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-100">
+          {BLISTER_THEMES.map((t) => {
+            const active = (state.blister.theme || 'classic_foil') === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onChangeTheme(t.id)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center justify-between transition active:scale-95 ${
+                  active
+                    ? 'app-accent-soft'
+                    : 'bg-slate-50 text-slate-600 border-slate-200/80'
+                }`}
+              >
+                <span>{t.name}</span>
+                {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+              </button>
+            );
+          })}
         </div>
-        <span className="text-xs font-bold text-rose-600">Ändern</span>
-      </button>
+      </div>
 
       {/* Name Your Cats Card */}
       <div className="bg-white rounded-3xl p-4 border border-rose-100/80 shadow-xs">

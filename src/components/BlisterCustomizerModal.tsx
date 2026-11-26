@@ -339,64 +339,34 @@ export const BlisterCustomizerModal: React.FC<BlisterCustomizerModalProps> = ({
             </div>
           </div>
 
-          {/* Form & Direction */}
-          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/70 space-y-3">
-            <div>
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Form
-              </span>
-              <div className="grid grid-cols-3 gap-1.5">
-                {(
-                  [
-                    { id: 'classic', label: 'Klassisch' },
-                    { id: 'compact', label: 'Kompakt' },
-                    { id: 'oval', label: 'Rund' },
-                  ] as const
-                ).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setDraft({ ...draft, shape: s.id })}
-                    className={`py-2 rounded-xl text-xs font-bold border transition ${
-                      draft.shape === s.id
-                        ? 'app-accent-soft'
-                        : 'bg-slate-50 text-slate-600 border-slate-200'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Richtung
-              </span>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, arrowFlow: 'snake' })}
-                  className={`py-2 rounded-xl text-xs font-bold border transition ${
-                    draft.arrowFlow === 'snake'
-                      ? 'app-accent-soft'
-                      : 'bg-slate-50 text-slate-600 border-slate-200'
-                  }`}
-                >
-                  Schlangenlinie ↩
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, arrowFlow: 'rows' })}
-                  className={`py-2 rounded-xl text-xs font-bold border transition ${
-                    draft.arrowFlow === 'rows'
-                      ? 'app-accent-soft'
-                      : 'bg-slate-50 text-slate-600 border-slate-200'
-                  }`}
-                >
-                  Zeilenweise →
-                </button>
-              </div>
+          {/* Direction */}
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/70">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              Einnahmerichtung
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setDraft({ ...draft, arrowFlow: 'snake' })}
+                className={`py-2 rounded-xl text-xs font-bold border transition ${
+                  draft.arrowFlow === 'snake'
+                    ? 'app-accent-soft'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                Schlangenlinie ↩
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft({ ...draft, arrowFlow: 'rows' })}
+                className={`py-2 rounded-xl text-xs font-bold border transition ${
+                  draft.arrowFlow === 'rows'
+                    ? 'app-accent-soft'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                Zeilenweise →
+              </button>
             </div>
           </div>
 

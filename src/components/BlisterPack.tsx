@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   RotateCw,
-  SlidersHorizontal,
   Check,
   AlertCircle,
   Clock,
@@ -9,13 +8,9 @@ import {
   Droplets,
   Undo2,
   X,
-  Cat,
-  Flower2,
-  Disc,
-  Utensils,
 } from 'lucide-react';
 import type { BlisterConfig, BlisterThemeId, CatNames, PillEntry } from '../types';
-import { BLISTER_THEMES, PILL_COLORS } from '../data/presets';
+import { PILL_COLORS } from '../data/presets';
 import {
   addDays,
   diffDays,
@@ -59,21 +54,21 @@ interface PawPrint {
   angle: number;
 }
 
-type CatAnimPhase = 'idle' | 'walking' | 'eating' | 'happy' | 'roaming' | 'sniffing' | 'sleeping';
+type CatActionState = 'idle' | 'walking' | 'eating' | 'happy' | 'sniffing' | 'sleeping';
 type BowlEatStage = 'full' | 'half' | 'empty';
 
 const ROTATION_SEEDS = [12, 74, 138, 196, 251, 314, 43, 109, 172, 229, 287, 342];
 
-const THEME_ICONS: Record<BlisterThemeId, React.ComponentType<{ className?: string }>> = {
-  classic_foil: Disc,
-  cat_peek: Cat,
-  cat_bowl: Utensils,
-  rosegold_bloom: Flower2,
-};
-
-const PRELOAD_SPRITES = [
+const WALK_FRAMES = [
+  '/assets/cat-walk-0.png',
   '/assets/cat-walk-1.png',
   '/assets/cat-walk-2.png',
+  '/assets/cat-walk-3.png',
+];
+
+const PRELOAD_SPRITES = [
+  '/assets/cat-walker.png',
+  ...WALK_FRAMES,
   '/assets/cat-eat-1.png',
   '/assets/cat-eat-2.png',
   '/assets/cat-sniff.png',
@@ -82,6 +77,10 @@ const PRELOAD_SPRITES = [
   '/assets/cat-bowl-full.png',
   '/assets/cat-bowl-half.png',
   '/assets/cat-bowl-empty.png',
+  '/assets/cat-peek-0.png',
+  '/assets/cat-peek-1.png',
+  '/assets/cat-peek-2.png',
+  '/assets/cat-peek-3.png',
   '/assets/cat-peek-happy-0.png',
   '/assets/cat-peek-happy-1.png',
   '/assets/cat-peek-happy-2.png',
@@ -103,8 +102,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   onPopPill,
   onUndoPill,
   onMarkMissed,
-  onChangeTheme,
-  onOpenCustomizer,
   onStartNewPack,
 }) => {
   const today = getTodayIso();
@@ -126,31 +123,33 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   } | null>(null);
   const [activeBlock, setActiveBlock] = useState(0);
 
-  // Peeking kittens live expressions (which pocket indices are currently smiling/meowing ^ ^)
+  // Peeking kittens happy expression index
   const [happyKittenIdx, setHappyKittenIdx] = useState<number | null>(null);
 
-  // Cat Bowl multi-frame walking & REAL eating choreography state
+  // Distance-driven real-position painted cat actor state (NEVER walks in place!)
   const cardRef = useRef<HTMLDivElement | null>(null);
   const pocketRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const [catPos, setCatPos] = useState<{ x: number; y: number } | null>(null);
-  const [catFacing, setCatFacing] = useState<'left' | 'right'>('right');
-  const [catPhase, setCatPhase] = useState<CatAnimPhase>('idle');
-  const [catFrame, setCatFrame] = useState<0 | 1>(0);
-  const [catWalkMs, setCatWalkMs] = useState(550);
+  const [catFacing, setCatFacing] = useState<'left' | 'right'>('left');
+  const [catState, setCatState] = useState<CatActionState>('idle');
+  const [walkFrameIdx, setWalkFrameIdx] = useState<number>(0);
+  const [eatFrameIdx, setEatFrameIdx] = useState<0 | 1>(0);
+  const [sleepBreathIdx, setSleepBreathIdx] = useState<0 | 1>(0);
   const [eatingBowlIndex, setEatingBowlIndex] = useState<number | null>(null);
   const [eatingBowlStage, setEatingBowlStage] = useState<BowlEatStage>('full');
   const [crumbBurstKey, setCrumbBurstKey] = useState(0);
   const [pawPrints, setPawPrints] = useState<PawPrint[]>([]);
   const [showCatTag, setShowCatTag] = useState(false);
-  const catTimersRef = useRef<number[]>([]);
-  const roamTimersRef = useRef<number[]>([]);
-  const catPosRef = useRef<{ x: number; y: number }>({ x: 160, y: 30 });
-  const roamStepCountRef = useRef(0);
 
+  const catPosRef = useRef<{ x: number; y: number }>({ x: 160, y: 34 });
+  const walkRafRef = useRef<number | null>(null);
+  const actionTimersRef = useRef<number[]>([]);
+  const roamTimersRef = useRef<number[]>([]);
+  const roamStepRef = useRef<number>(0);
   const holdTimerRef = useRef<number | null>(null);
   const didHoldPopRef = useRef(false);
 
-  // Preload all multi-frame sprites for flicker-free animation
+  // Preload all painted sprites for instant frame transitions
   useEffect(() => {
     PRELOAD_SPRITES.forEach((src) => {
       const img = new Image();
@@ -158,9 +157,16 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     });
   }, []);
 
-  const clearCatTimers = () => {
-    catTimersRef.current.forEach((id) => window.clearTimeout(id));
-    catTimersRef.current = [];
+  const stopWalkingMotion = () => {
+    if (walkRafRef.current !== null) {
+      window.cancelAnimationFrame(walkRafRef.current);
+      walkRafRef.current = null;
+    }
+  };
+
+  const clearActionTimers = () => {
+    actionTimersRef.current.forEach((id) => window.clearTimeout(id));
+    actionTimersRef.current = [];
   };
 
   const clearRoamTimers = () => {
@@ -169,43 +175,44 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
   };
 
   useEffect(() => {
-    if (catPos) {
-      catPosRef.current = catPos;
-    }
+    if (catPos) catPosRef.current = catPos;
   }, [catPos]);
 
   useEffect(() => {
     return () => {
-      clearCatTimers();
+      stopWalkingMotion();
+      clearActionTimers();
       clearRoamTimers();
     };
   }, []);
 
   useEffect(() => {
-    if (isCatBowl && isBackView) {
-      setIsBackView(false);
-    }
+    if (isCatBowl && isBackView) setIsBackView(false);
   }, [isCatBowl, isBackView]);
 
-  // Multi-frame sprite ticker for walking/roaming (145ms), eating (220ms), and sleeping breath (1150ms)
+  // Smooth eating frame swap ONLY while actively eating
   useEffect(() => {
-    if (catPhase !== 'walking' && catPhase !== 'roaming' && catPhase !== 'eating' && catPhase !== 'sleeping') {
-      setCatFrame(0);
+    if (catState !== 'eating') {
+      setEatFrameIdx(0);
       return;
     }
-    const intervalMs =
-      catPhase === 'walking'
-        ? 140
-        : catPhase === 'roaming'
-        ? 165
-        : catPhase === 'eating'
-        ? 220
-        : 1150;
     const id = window.setInterval(() => {
-      setCatFrame((f) => (f === 0 ? 1 : 0));
-    }, intervalMs);
+      setEatFrameIdx((f) => (f === 0 ? 1 : 0));
+    }, 260);
     return () => window.clearInterval(id);
-  }, [catPhase]);
+  }, [catState]);
+
+  // Peaceful breathing frame crossfade ONLY while sleeping (ZERO CSS scaling!)
+  useEffect(() => {
+    if (catState !== 'sleeping') {
+      setSleepBreathIdx(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setSleepBreathIdx((f) => (f === 0 ? 1 : 0));
+    }, 1300);
+    return () => window.clearInterval(id);
+  }, [catState]);
 
   const totalPhysicalPills = config.activePills + config.placeboPills;
   const totalCycleDays = totalPhysicalPills + config.pauseDays;
@@ -250,7 +257,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     return list;
   }, [config.packStartDate, config.activePills, entries, sheetStart, sheetEnd, today]);
 
-  // Periodic lively happy-meow/smile animation on random popped peeking kittens!
+  // Periodic natural happy smile/meow on a random popped kitten in Katzen-Versteck
   const poppedIndices = useMemo(
     () =>
       pills
@@ -266,8 +273,8 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       setHappyKittenIdx(pick);
       window.setTimeout(() => {
         setHappyKittenIdx((cur) => (cur === pick ? null : cur));
-      }, 1150);
-    }, 3200);
+      }, 1300);
+    }, 3600);
     return () => window.clearInterval(id);
   }, [isCatPeek, poppedIndices]);
 
@@ -313,123 +320,164 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     };
   };
 
-  // Position cat cleanly: when 0 bowls eaten, rest nicely in top-center lounge (never hiding Bowl #1!)
+  /**
+   * TRUE DISTANCE-DRIVEN WALK ENGINE (requestAnimationFrame):
+   * Moves (x, y) smoothly at constant real speed (px/sec).
+   * Advances walk frames strictly every `stepPx` of ACTUAL distance traveled —
+   * mathematically impossible to ever walk in place or slide!
+   */
+  const walkCatToPoint = (
+    dest: { x: number; y: number },
+    speedPxPerSec: number,
+    onArrive: () => void
+  ) => {
+    stopWalkingMotion();
+    const start = { ...catPosRef.current };
+    const dx = dest.x - start.x;
+    const dy = dest.y - start.y;
+    const totalDist = Math.hypot(dx, dy);
+
+    if (totalDist < 6) {
+      onArrive();
+      return;
+    }
+
+    setCatFacing(dx >= 0 ? 'right' : 'left');
+    setCatState('walking');
+
+    const moveAngle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    let lastNow = performance.now();
+    let traveled = 0;
+    let nextPawAt = 24;
+    let pawStepSide = 1;
+
+    const step = (now: number) => {
+      const dt = Math.min(0.05, (now - lastNow) / 1000);
+      lastNow = now;
+      traveled = Math.min(totalDist, traveled + speedPxPerSec * dt);
+      const frac = traveled / totalDist;
+
+      const curX = start.x + dx * frac;
+      const curY = start.y + dy * frac;
+      catPosRef.current = { x: curX, y: curY };
+      setCatPos({ x: curX, y: curY });
+
+      // Advance 4-frame stride cycle ONLY as real pixels are covered!
+      const frameIdx = Math.floor(traveled / 14) % WALK_FRAMES.length;
+      setWalkFrameIdx(frameIdx);
+
+      // Leave a gentle pawprint behind actual footsteps
+      if (traveled >= nextPawAt && totalDist - traveled > 14) {
+        const px = curX - (dx / totalDist) * 10 + (pawStepSide * 4);
+        const py = curY + 14;
+        const pid = Date.now() + Math.floor(traveled);
+        setPawPrints((prev) => [...prev.slice(-6), { id: pid, x: px, y: py, angle: moveAngle }]);
+        window.setTimeout(() => {
+          setPawPrints((prev) => prev.filter((p) => p.id !== pid));
+        }, 1600);
+        nextPawAt += 28;
+        pawStepSide = -pawStepSide;
+      }
+
+      if (traveled < totalDist) {
+        walkRafRef.current = window.requestAnimationFrame(step);
+      } else {
+        walkRafRef.current = null;
+        // Stop walk frames IMMEDIATELY upon arrival (never walks in place!)
+        onArrive();
+      }
+    };
+
+    walkRafRef.current = window.requestAnimationFrame(step);
+  };
+
+  // Initial cat placement when entering Cat Bowl mode
   useEffect(() => {
     if (!isCatBowl) return;
+    stopWalkingMotion();
+    clearActionTimers();
+    clearRoamTimers();
+
     const raf = window.requestAnimationFrame(() => {
       const cardW = cardRef.current?.clientWidth || 320;
       const poppedPills = pills.filter(
         (p) => p.entry?.status === 'taken' || p.entry?.status === 'late'
       );
       if (poppedPills.length === 0) {
-        setCatPos({ x: cardW / 2, y: 30 });
+        const pt = { x: cardW / 2, y: 34 };
+        catPosRef.current = pt;
+        setCatPos(pt);
         setCatFacing('left');
-        setCatPhase('idle');
+        setCatState('idle');
         return;
       }
       const anchor = poppedPills[poppedPills.length - 1];
       const pt = getPocketCenter(anchor.dayIndex);
       if (pt) {
-        setCatPos({ x: pt.x + 12, y: Math.max(36, pt.y - 16) });
-        setCatPhase('idle');
+        const stand = { x: Math.min(cardW - 36, pt.x + 22), y: Math.max(38, pt.y - 6) };
+        catPosRef.current = stand;
+        setCatPos(stand);
+        setCatState('idle');
       }
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [isCatBowl, config.columns, config.shape, currentSheet, totalPhysicalPills]);
+  }, [isCatBowl, config.columns, currentSheet, totalPhysicalPills]);
 
-  // AUTONOMOUS COZY LIFE: After eating at least 1 bowl, the cat roams across the blister, sniffs curiously, and curls up to sleep!
+  // AUTONOMOUS COZY LIFE: After eating at least 1 bowl, stroll -> sniff -> stroll -> curl up & sleep!
   useEffect(() => {
-    if (!isCatBowl || poppedCount === 0 || eatingBowlIndex !== null) {
-      clearRoamTimers();
+    if (!isCatBowl || poppedCount === 0 || eatingBowlIndex !== null || catState !== 'idle') {
       return;
     }
-    if (catPhase !== 'idle') return;
 
-    const scheduleRoamCycle = () => {
-      clearRoamTimers();
-      const tStart = window.setTimeout(() => {
-        const cardEl = cardRef.current;
-        if (!cardEl) return;
-        const cw = cardEl.clientWidth || 320;
-        const ch = cardEl.clientHeight || 280;
-        const start = catPosRef.current;
-
-        // Every 3rd cycle, curl up peacefully for a nap! Otherwise stroll & sniff!
-        roamStepCountRef.current += 1;
-        const shouldNap = roamStepCountRef.current % 3 === 0;
-
-        // Pick a pleasant roaming point inside the blister card margins
-        const padX = 38;
-        const padTop = 44;
-        const padBottom = 38;
-        let destX = padX + Math.random() * Math.max(40, cw - padX * 2);
-        let destY = padTop + Math.random() * Math.max(40, ch - padTop - padBottom);
-        // Ensure a noticeable stroll distance
-        if (Math.hypot(destX - start.x, destY - start.y) < 55) {
-          destX = start.x > cw / 2 ? padX + 24 : cw - padX - 24;
-        }
-
-        const dx = destX - start.x;
-        const dy = destY - start.y;
-        const dist = Math.hypot(dx, dy);
-        const strollMs = Math.max(700, Math.min(1650, Math.round(dist * 6.2)));
-
-        setCatFacing(dx >= 0 ? 'right' : 'left');
-        setCatWalkMs(strollMs);
-        setCatPhase('roaming');
-
-        // Soft exploratory pawprints
-        const steps = Math.min(4, Math.max(2, Math.floor(dist / 42)));
-        const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
-        const prints: PawPrint[] = [];
-        for (let s = 1; s <= steps; s++) {
-          const frac = s / (steps + 1);
-          prints.push({
-            id: Date.now() + s,
-            x: start.x + dx * frac + (s % 2 === 0 ? 4 : -4),
-            y: start.y + dy * frac + 14,
-            angle,
-          });
-        }
-        setPawPrints(prints);
-
-        window.requestAnimationFrame(() => {
-          setCatPos({ x: destX, y: destY });
-        });
-
-        const tArrive = window.setTimeout(() => {
-          setPawPrints([]);
-          if (shouldNap) {
-            // Curl up into a warm sleeping cinnamon roll with floating Zzz!
-            setCatPhase('sleeping');
-            const tWake = window.setTimeout(() => {
-              setCatPhase('idle');
-            }, 7200);
-            roamTimersRef.current.push(tWake);
-          } else {
-            // Sniff curiously around the blister!
-            setCatPhase('sniffing');
-            const tDoneSniff = window.setTimeout(() => {
-              setCatPhase('idle');
-            }, 2800);
-            roamTimersRef.current.push(tDoneSniff);
-          }
-        }, strollMs);
-
-        roamTimersRef.current.push(tArrive);
-      }, 2200);
-
-      roamTimersRef.current = [tStart];
-    };
-
-    scheduleRoamCycle();
-    return () => clearRoamTimers();
-  }, [isCatBowl, poppedCount, eatingBowlIndex, catPhase]);
-
-  // REAL MULTI-STAGE WALK -> BITE -> HALF-BOWL -> CHEW -> EMPTY-BOWL -> HAPPY LICK CHOREOGRAPHY!
-  const runCatToBowl = (dayIndex: number, date: string) => {
-    clearCatTimers();
     clearRoamTimers();
+    const tNext = window.setTimeout(() => {
+      const cardEl = cardRef.current;
+      if (!cardEl) return;
+      const cw = cardEl.clientWidth || 320;
+      const ch = cardEl.clientHeight || 280;
+      const start = catPosRef.current;
+
+      roamStepRef.current += 1;
+      const shouldSleep = roamStepRef.current % 2 === 0;
+
+      // Pick a pleasant unobstructed destination inside the mat
+      const padX = 38;
+      const padTop = 44;
+      const padBottom = 38;
+      let destX = padX + Math.random() * Math.max(40, cw - padX * 2);
+      let destY = padTop + Math.random() * Math.max(40, ch - padTop - padBottom);
+      if (Math.hypot(destX - start.x, destY - start.y) < 60) {
+        destX = start.x > cw / 2 ? padX + 20 : cw - padX - 20;
+      }
+
+      // Calm leisurely stroll (58 px/s, distance-driven frames!)
+      walkCatToPoint({ x: destX, y: destY }, 58, () => {
+        if (shouldSleep) {
+          setCatState('sleeping');
+          const tWake = window.setTimeout(() => {
+            setCatState('idle');
+          }, 7200);
+          roamTimersRef.current.push(tWake);
+        } else {
+          setCatState('sniffing');
+          const tDoneSniff = window.setTimeout(() => {
+            setCatState('idle');
+          }, 2800);
+          roamTimersRef.current.push(tDoneSniff);
+        }
+      });
+    }, 1600);
+
+    roamTimersRef.current = [tNext];
+    return () => clearRoamTimers();
+  }, [isCatBowl, poppedCount, eatingBowlIndex, catState]);
+
+  // Send painted cat walking cleanly to the clicked bowl, eat in 3 stages, then resume cozy life!
+  const runCatToBowl = (dayIndex: number, date: string) => {
+    stopWalkingMotion();
+    clearActionTimers();
+    clearRoamTimers();
+
     const target = getPocketCenter(dayIndex);
     if (!target) {
       playCatMunchSound(soundEnabled);
@@ -438,77 +486,45 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     }
 
     const cardW = cardRef.current?.clientWidth || 320;
-    const start = catPos || { x: cardW / 2, y: 30 };
-    // Position cat slightly offset beside the bowl so her head dips directly into the bowl!
     const standOnRight = target.x < cardW * 0.72;
     const dest = {
-      x: standOnRight ? target.x + 22 : target.x - 22,
-      y: Math.max(34, target.y - 8),
+      x: standOnRight ? target.x + 24 : target.x - 24,
+      y: Math.max(38, target.y - 6),
     };
-    const dx = dest.x - start.x;
-    const dy = dest.y - start.y;
-    const dist = Math.hypot(dx, dy);
-    const travelDuration = Math.max(420, Math.min(860, Math.round(dist * 3.3)));
 
-    // Sprite natively faces LEFT
-    setCatFacing(dx >= 0 ? 'right' : 'left');
-    setCatWalkMs(travelDuration);
-    setCatPhase('walking');
     setEatingBowlIndex(dayIndex);
     setEatingBowlStage('full');
     triggerHaptic(hapticsEnabled, 'light');
 
-    // Pawprint trail along walking line
-    const steps = Math.min(6, Math.max(2, Math.floor(dist / 32)));
-    const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
-    const prints: PawPrint[] = [];
-    for (let s = 1; s <= steps; s++) {
-      const frac = s / (steps + 1);
-      prints.push({
-        id: Date.now() + s,
-        x: start.x + dx * frac + (s % 2 === 0 ? 5 : -5),
-        y: start.y + dy * frac + 14,
-        angle,
-      });
-    }
-    setPawPrints(prints);
-
-    window.requestAnimationFrame(() => {
-      setCatPos(dest);
-    });
-
-    // 1. Arrive at bowl, turn to face the bowl directly, start real biting & chewing!
-    const tArrive = window.setTimeout(() => {
+    // Eager trot straight to the bowl (110 px/s, distance-driven 4-frame stride!)
+    walkCatToPoint(dest, 110, () => {
+      // Face the bowl directly and begin real 3-stage eating!
       setCatFacing(standOnRight ? 'left' : 'right');
-      setCatPhase('eating');
+      setCatState('eating');
       setCrumbBurstKey((k) => k + 1);
       playCatMunchSound(soundEnabled);
       triggerHaptic(hapticsEnabled, 'medium');
-    }, travelDuration);
 
-    // 2. Bite 2: Bowl visibly drops from FULL -> HALF-EATEN + second crumb burst!
-    const tHalf = window.setTimeout(() => {
-      setEatingBowlStage('half');
-      setCrumbBurstKey((k) => k + 1);
-      triggerHaptic(hapticsEnabled, 'light');
-    }, travelDuration + 460);
+      const tHalf = window.setTimeout(() => {
+        setEatingBowlStage('half');
+        setCrumbBurstKey((k) => k + 1);
+        triggerHaptic(hapticsEnabled, 'light');
+      }, 520);
 
-    // 3. Final bite: Bowl becomes LICKED CLEAN EMPTY + record pill!
-    const tEmpty = window.setTimeout(() => {
-      setEatingBowlStage('empty');
-      setCatPhase('happy');
-      onPopPill(dayIndex, date);
-      triggerHaptic(hapticsEnabled, 'heavy');
-    }, travelDuration + 1020);
+      const tEmpty = window.setTimeout(() => {
+        setEatingBowlStage('empty');
+        setCatState('happy');
+        onPopPill(dayIndex, date);
+        triggerHaptic(hapticsEnabled, 'heavy');
+      }, 1100);
 
-    // 4. Satisfied lip-lick pause, then calm idle!
-    const tDone = window.setTimeout(() => {
-      setCatPhase('idle');
-      setEatingBowlIndex(null);
-      setPawPrints([]);
-    }, travelDuration + 1680);
+      const tIdle = window.setTimeout(() => {
+        setEatingBowlIndex(null);
+        setCatState('idle');
+      }, 2000);
 
-    catTimersRef.current = [tArrive, tHalf, tEmpty, tDone];
+      actionTimersRef.current = [tHalf, tEmpty, tIdle];
+    });
   };
 
   const executePop = (dayIndex: number, date: string, isPlacebo: boolean) => {
@@ -525,7 +541,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
       setHappyKittenIdx(dayIndex);
       window.setTimeout(() => {
         setHappyKittenIdx((cur) => (cur === dayIndex ? null : cur));
-      }, 1650);
+      }, 1600);
     } else {
       playBlisterPopSound(soundEnabled);
     }
@@ -543,7 +559,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     const isPopped = pill.entry?.status === 'taken' || pill.entry?.status === 'late';
     if (isPopped) {
       if (isCatPeek) {
-        // Petting a popped kitten triggers a happy meow animation before opening details!
         playCatPeekSound(soundEnabled);
         triggerHaptic(hapticsEnabled, 'light');
         setHappyKittenIdx(pill.dayIndex);
@@ -632,51 +647,45 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     totalPhysicalPills > 0 &&
     (poppedCount >= totalPhysicalPills || currentCycleIndex >= totalCycleDays);
 
-  // Current sprite URL for our animated cat
-  const catSpriteSrc =
-    catPhase === 'walking' || catPhase === 'roaming'
-      ? catFrame === 0
-        ? '/assets/cat-walk-1.png'
-        : '/assets/cat-walk-2.png'
-      : catPhase === 'eating'
-      ? catFrame === 0
+  // Active painted sprite URL for the bowl cat (ZERO CSS scaling/wobble!)
+  const activeCatSprite =
+    catState === 'walking'
+      ? WALK_FRAMES[walkFrameIdx]
+      : catState === 'eating'
+      ? eatFrameIdx === 0
         ? '/assets/cat-eat-1.png'
         : '/assets/cat-eat-2.png'
-      : catPhase === 'sniffing'
+      : catState === 'happy'
+      ? '/assets/cat-eat-2.png'
+      : catState === 'sniffing'
       ? '/assets/cat-sniff.png'
-      : catPhase === 'sleeping'
-      ? catFrame === 0
+      : catState === 'sleeping'
+      ? sleepBreathIdx === 0
         ? '/assets/cat-sleep-1.png'
         : '/assets/cat-sleep-2.png'
-      : catPhase === 'happy'
-      ? '/assets/cat-eat-2.png'
-      : '/assets/cat-walk-1.png';
+      : '/assets/cat-walker.png';
 
-  const renderPocket = (pill: (typeof pills)[number], compactSize = false) => {
+  const renderPocket = (pill: (typeof pills)[number]) => {
     const status = pill.entry?.status;
     const isPopped = status === 'taken' || status === 'late';
     const isMissed = status === 'missed' || (pill.isPast && !isPopped && !pill.isPlacebo);
     const isJustPopping = poppingAnim?.dayIndex === pill.dayIndex;
     const isActiveEatBowl = isCatBowl && eatingBowlIndex === pill.dayIndex;
-    const isBeingEaten = isActiveEatBowl && catPhase === 'eating';
+    const isBeingEaten = isActiveEatBowl && catState === 'eating';
     const isPressing = pressingIndex === pill.dayIndex;
     const isKittenHappy = isCatPeek && happyKittenIdx === pill.dayIndex;
     const colorKey = pill.isPlacebo ? config.placeboColor : config.activeColor;
     const colorStyle = PILL_COLORS[colorKey];
     const rotation = ROTATION_SEEDS[pill.dayIndex % ROTATION_SEEDS.length];
     const catVariantIdx = pill.dayIndex % 4;
-    // Staggered organic delay for each kitten's living head-tilt animation
-    const kittenDelaySec = `${((pill.dayIndex * 0.85) % 4.5).toFixed(2)}s`;
 
-    const pocketDim = compactSize
-      ? 'w-9 h-9 sm:w-10 sm:h-10'
-      : config.columns >= 7
-      ? 'w-10 h-10 sm:w-11 sm:h-11'
-      : config.columns >= 5
-      ? 'w-12 h-12 sm:w-13 sm:h-13'
-      : 'w-14 h-14 sm:w-15 sm:h-15';
+    const pocketDim =
+      config.columns >= 7
+        ? 'w-10 h-10 sm:w-11 sm:h-11'
+        : config.columns >= 5
+        ? 'w-12 h-12 sm:w-13 sm:h-13'
+        : 'w-14 h-14 sm:w-15 sm:h-15';
 
-    // Determine exact bowl image (full -> half -> empty during real eating!)
     const bowlSrc = isPopped
       ? '/assets/cat-bowl-empty.png'
       : isActiveEatBowl && eatingBowlStage === 'half'
@@ -719,7 +728,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
           aria-label={`Tag ${pill.dayIndex + 1}, ${pill.weekday} ${formatDateShort(pill.date)}`}
           className={`relative ${pocketDim} rounded-full flex items-center justify-center cursor-pointer select-none transition-transform duration-150 focus:outline-none ${
             pill.isToday && !isPopped ? 'animate-today-pulse' : ''
-          } ${isPressing ? 'scale-[0.88]' : 'hover:scale-[1.05] active:scale-[0.90]'}`}
+          } ${isPressing ? 'scale-[0.90]' : 'active:scale-[0.92]'}`}
         >
           {!isCatBowl && (
             <span
@@ -750,9 +759,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 src={bowlSrc}
                 alt=""
                 draggable={false}
-                className={`w-[108%] h-[108%] max-w-none object-contain drop-shadow-sm transition-all duration-200 pointer-events-none ${
-                  isBeingEaten ? 'scale-95' : ''
-                }`}
+                className="w-[108%] h-[108%] max-w-none object-contain drop-shadow-sm pointer-events-none"
               />
               {pill.isPlacebo && !isPopped && (
                 <span className="absolute -top-1 -right-1 px-1 rounded-full bg-violet-500 text-white text-[7px] font-bold shadow-xs">
@@ -767,7 +774,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 />
               )}
 
-              {/* Real flying brown kibble crumbs & pink hearts during eating! */}
+              {/* Crunchy kibble crumbs popping out during eating */}
               {isBeingEaten && (
                 <div key={crumbBurstKey} className="absolute inset-0 pointer-events-none z-40">
                   {[
@@ -775,7 +782,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                     { cx: '18px', cy: '-15px' },
                     { cx: '-12px', cy: '-24px' },
                     { cx: '10px', cy: '-22px' },
-                    { cx: '0px', cy: '-26px' },
                   ].map((c, idx) => (
                     <span
                       key={idx}
@@ -784,33 +790,21 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                         {
                           '--cx': c.cx,
                           '--cy': c.cy,
-                          animationDelay: `${idx * 45}ms`,
+                          animationDelay: `${idx * 55}ms`,
                         } as React.CSSProperties
                       }
                     />
                   ))}
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-rose-500 text-xs font-bold animate-heart-float">
-                    ♥
-                  </span>
                 </div>
               )}
             </div>
           ) : isPopped ? (
             isCatPeek ? (
-              /* LIVELY ANIMATED PEEKING KITTEN WITH DUAL EXPRESSION & STAGGERED WIGGLE! */
+              /* BELOVED PAINTED PEEKING KITTENS — smooth pop-out + crisp happy ^ ^ meow swap, ZERO wobbling! */
               <div
                 className={`relative w-[118%] h-[118%] rounded-full flex items-center justify-center pointer-events-none ${
-                  isJustPopping
-                    ? 'animate-cat-peek'
-                    : isKittenHappy
-                    ? 'animate-kitten-joy'
-                    : 'animate-kitten-alive'
+                  isJustPopping ? 'animate-cat-peek' : ''
                 }`}
-                style={
-                  !isJustPopping && !isKittenHappy
-                    ? { animationDelay: kittenDelaySec }
-                    : undefined
-                }
               >
                 <img
                   src={
@@ -823,7 +817,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                   className="w-full h-full object-cover rounded-full pointer-events-none drop-shadow-xs"
                 />
                 {isKittenHappy && (
-                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-rose-500 text-[11px] font-bold animate-heart-float">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-rose-500 text-[11px] font-bold animate-heart-float">
                     ♥
                   </span>
                 )}
@@ -886,9 +880,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             )
           ) : isBackView ? (
             <div
-              className={`relative w-full h-full rounded-full flex flex-col items-center justify-center border border-slate-400/60 shadow-inner transition-all ${
-                isPressing ? 'brightness-90 scale-95' : ''
-              }`}
+              className="relative w-full h-full rounded-full flex flex-col items-center justify-center border border-slate-400/60 shadow-inner"
               style={{
                 background: isRoseGold
                   ? 'radial-gradient(circle at 35% 30%, rgba(255,241,242,0.85), rgba(244,182,194,0.8) 60%, rgba(190,120,138,0.85) 100%)'
@@ -905,11 +897,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               )}
             </div>
           ) : (
-            <div
-              className={`relative w-full h-full rounded-full flex items-center justify-center transition-all duration-150 ${
-                isPressing ? 'brightness-95' : ''
-              }`}
-            >
+            <div className="relative w-full h-full rounded-full flex items-center justify-center">
               <span className="absolute inset-0 rounded-full bg-slate-900/18 blur-[1.5px] translate-y-[1.5px]" />
               <span className="absolute inset-0 rounded-full border border-white/75 bg-gradient-to-br from-white/40 via-slate-200/20 to-slate-500/30" />
               <span
@@ -1001,8 +989,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
     );
   };
 
-  const useOvalLayout = config.shape === 'oval' && pills.length <= 28;
-
   const surfaceClass = isCatBowl
     ? 'blister-catbowl-surface border-amber-200/80'
     : isRoseGold
@@ -1021,64 +1007,6 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
 
   return (
     <div className="w-full flex flex-col items-center">
-      {/* Slim Design Switcher + Controls */}
-      <div className="w-full flex items-center justify-between gap-1.5 mb-2.5">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          {BLISTER_THEMES.map((t) => {
-            const Icon = THEME_ICONS[t.id];
-            const active = theme === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => {
-                  triggerHaptic(hapticsEnabled, 'light');
-                  onChangeTheme(t.id);
-                }}
-                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition active:scale-95 ${
-                  active
-                    ? 'app-accent-bg text-white shadow-xs'
-                    : 'bg-white/90 text-slate-600 border-rose-100'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {t.shortLabel}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          {!isCatBowl && (
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic(hapticsEnabled, 'light');
-                setIsBackView((v) => !v);
-              }}
-              className="w-8 h-8 rounded-xl bg-white/90 border border-slate-200/80 text-slate-600 flex items-center justify-center active:scale-95 transition"
-              title="Umdrehen"
-              aria-label="Blister umdrehen"
-            >
-              <RotateCw
-                className={`w-3.5 h-3.5 transition-transform duration-300 ${
-                  isBackView ? 'rotate-180 app-accent-text' : ''
-                }`}
-              />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onOpenCustomizer}
-            className="w-8 h-8 rounded-xl app-accent-soft border flex items-center justify-center active:scale-95 transition"
-            title="Blister anpassen"
-            aria-label="Blister anpassen"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
       {/* Multi-sheet selector for 84+7 */}
       {isMultiSheet && (
         <div className="w-full flex items-center justify-center gap-2 mb-2.5">
@@ -1099,22 +1027,16 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
         </div>
       )}
 
-      {/* THE BLISTER CARD */}
+      {/* SERENE, UNCLUTTERED BLISTER CARD (design selection lives cleanly in Settings!) */}
       <div className="w-full perspective-1200">
         <div
           ref={cardRef}
-          className={`relative w-full transition-all duration-500 ${surfaceClass} ${
-            useOvalLayout
-              ? 'rounded-[44px] px-4 py-6'
-              : config.shape === 'compact'
-              ? 'rounded-[22px] px-3 py-4'
-              : 'rounded-[28px] px-3.5 py-5 sm:px-5 sm:py-5'
-          } border overflow-hidden`}
+          className={`relative w-full transition-all duration-500 ${surfaceClass} rounded-[28px] px-3.5 py-5 sm:px-5 sm:py-5 border overflow-hidden`}
         >
-          {/* Top Bar inside Card (extra lounge headroom when Cat Bowl has 0 eaten so Mimi rests cleanly above Bowl #1) */}
+          {/* Minimal Clean Top Bar inside Card */}
           <div
-            className={`relative z-10 flex items-center justify-between text-[10px] font-semibold opacity-75 px-0.5 select-none ${
-              isCatBowl && poppedCount === 0 ? 'mb-9' : 'mb-3'
+            className={`relative z-10 flex items-center justify-between text-[11px] font-semibold opacity-80 px-0.5 select-none ${
+              isCatBowl && poppedCount === 0 ? 'mb-9' : 'mb-3.5'
             }`}
           >
             <span
@@ -1124,13 +1046,34 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             >
               {config.brandName.trim() ? `${config.brandName.trim()} • ${schemaTag}` : schemaTag}
             </span>
-            <span
-              className={
-                isCatBowl ? 'text-amber-900' : isRoseGold ? 'text-rose-900' : 'text-slate-600'
-              }
-            >
-              {poppedCount}/{totalPhysicalPills}
-            </span>
+
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  isCatBowl ? 'text-amber-900' : isRoseGold ? 'text-rose-900' : 'text-slate-600'
+                }
+              >
+                {poppedCount}/{totalPhysicalPills}
+              </span>
+              {!isCatBowl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic(hapticsEnabled, 'light');
+                    setIsBackView((v) => !v);
+                  }}
+                  className="w-6 h-6 rounded-full bg-white/60 hover:bg-white/90 text-slate-600 flex items-center justify-center active:scale-95 transition"
+                  title="Rückseite"
+                  aria-label="Blister umdrehen"
+                >
+                  <RotateCw
+                    className={`w-3 h-3 transition-transform duration-300 ${
+                      isBackView ? 'rotate-180 app-accent-text' : ''
+                    }`}
+                  />
+                </button>
+              )}
+            </div>
           </div>
 
           {!isCatBowl && (
@@ -1143,13 +1086,13 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
             />
           )}
 
-          {/* Pawprint trail overlay */}
+          {/* Pawprint trail overlay dropped by actual footsteps */}
           {isCatBowl &&
             pawPrints.map((pp) => (
               <svg
                 key={pp.id}
                 viewBox="0 0 24 24"
-                className="absolute w-3.5 h-3.5 text-amber-700/35 fill-current pointer-events-none z-20 transition-opacity duration-500"
+                className="absolute w-3.5 h-3.5 text-amber-800/35 fill-current pointer-events-none z-20"
                 style={{
                   left: `${pp.x}px`,
                   top: `${pp.y}px`,
@@ -1163,159 +1106,120 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
               </svg>
             ))}
 
-          {/* POCKET LAYOUT */}
-          {useOvalLayout ? (
-            <div className="relative z-10 my-2 flex items-center justify-center">
-              <div className="relative w-[304px] h-[304px] sm:w-[332px] sm:h-[332px]">
+          {/* CLEAN RESPONSIVE BLISTER GRID (ZERO OVERLAPPING!) */}
+          <div className="relative z-10 space-y-3.5">
+            {rows.map((row, rowIdx) => (
+              <div key={row.rowIdx} className="relative">
+                {rowIdx > 0 && (
+                  <div
+                    className={`w-full border-t border-dashed mb-3 relative ${
+                      isCatBowl ? 'border-amber-300/60' : 'border-slate-500/28'
+                    }`}
+                  />
+                )}
+
                 <div
-                  className={`absolute inset-[56px] rounded-full border border-dashed flex flex-col items-center justify-center text-center p-4 shadow-inner ${
-                    isCatBowl
-                      ? 'border-amber-400/50 bg-white/55'
-                      : 'border-slate-500/35 bg-white/25 backdrop-blur-[1px]'
-                  }`}
+                  className="grid items-center justify-items-center gap-y-2"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(
+                      3,
+                      Math.min(7, config.columns)
+                    )}, minmax(0, 1fr))`,
+                  }}
                 >
-                  <span className="text-xl font-bold text-slate-800">
-                    {poppedCount}/{totalPhysicalPills}
-                  </span>
-                  {config.brandName.trim() && (
-                    <span className="text-[11px] text-slate-600 mt-0.5 truncate max-w-full">
-                      {config.brandName.trim()}
-                    </span>
-                  )}
+                  {row.items.map((pill, colIdx) => {
+                    const hasNextInRow = row.isReversed
+                      ? colIdx > 0
+                      : colIdx < row.items.length - 1;
+                    const showRightArrow =
+                      config.showArrows && !row.isReversed && hasNextInRow;
+                    const showLeftArrow =
+                      config.showArrows && row.isReversed && hasNextInRow;
+
+                    return (
+                      <div
+                        key={pill.dayIndex}
+                        className="relative w-full flex items-center justify-center"
+                      >
+                        {renderPocket(pill)}
+
+                        {showRightArrow && (
+                          <span
+                            className={`absolute -right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none select-none ${
+                              isCatBowl ? 'text-amber-600/45' : 'text-slate-500/65'
+                            }`}
+                            aria-hidden="true"
+                          >
+                            ›
+                          </span>
+                        )}
+                        {showLeftArrow && (
+                          <span
+                            className={`absolute -left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none select-none ${
+                              isCatBowl ? 'text-amber-600/45' : 'text-slate-500/65'
+                            }`}
+                            aria-hidden="true"
+                          >
+                            ‹
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {pills.map((pill, idx) => {
-                  const angle = (idx / pills.length) * Math.PI * 2 - Math.PI / 2;
-                  const radiusPct = 42;
-                  const x = 50 + radiusPct * Math.cos(angle);
-                  const y = 50 + radiusPct * Math.sin(angle);
-                  return (
+                {config.showArrows &&
+                  config.arrowFlow === 'snake' &&
+                  rowIdx < rows.length - 1 && (
                     <div
-                      key={pill.dayIndex}
-                      className="absolute -translate-x-1/2 -translate-y-1/2"
-                      style={{ left: `${x}%`, top: `${y}%` }}
-                    >
-                      {renderPocket(pill, pills.length > 21)}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="relative z-10 space-y-3.5">
-              {rows.map((row, rowIdx) => (
-                <div key={row.rowIdx} className="relative">
-                  {rowIdx > 0 && (
-                    <div
-                      className={`w-full border-t border-dashed mb-3 relative ${
-                        isCatBowl ? 'border-amber-300/60' : 'border-slate-500/28'
+                      className={`flex px-4 pt-1 pointer-events-none select-none ${
+                        row.isReversed ? 'justify-start' : 'justify-end'
                       }`}
-                    />
-                  )}
-
-                  <div
-                    className="grid items-center justify-items-center gap-y-2"
-                    style={{
-                      gridTemplateColumns: `repeat(${Math.max(
-                        3,
-                        Math.min(7, config.columns)
-                      )}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {row.items.map((pill, colIdx) => {
-                      const hasNextInRow = row.isReversed
-                        ? colIdx > 0
-                        : colIdx < row.items.length - 1;
-                      const showRightArrow =
-                        config.showArrows && !row.isReversed && hasNextInRow;
-                      const showLeftArrow =
-                        config.showArrows && row.isReversed && hasNextInRow;
-
-                      return (
-                        <div
-                          key={pill.dayIndex}
-                          className="relative w-full flex items-center justify-center"
-                        >
-                          {renderPocket(pill, config.shape === 'compact')}
-
-                          {showRightArrow && (
-                            <span
-                              className={`absolute -right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none select-none ${
-                                isCatBowl ? 'text-amber-600/45' : 'text-slate-500/65'
-                              }`}
-                              aria-hidden="true"
-                            >
-                              ›
-                            </span>
-                          )}
-                          {showLeftArrow && (
-                            <span
-                              className={`absolute -left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none select-none ${
-                                isCatBowl ? 'text-amber-600/45' : 'text-slate-500/65'
-                              }`}
-                              aria-hidden="true"
-                            >
-                              ‹
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {config.showArrows &&
-                    config.arrowFlow === 'snake' &&
-                    rowIdx < rows.length - 1 && (
-                      <div
-                        className={`flex px-4 pt-1 pointer-events-none select-none ${
-                          row.isReversed ? 'justify-start' : 'justify-end'
+                    >
+                      <span
+                        className={`text-[10px] leading-none font-bold ${
+                          isCatBowl ? 'text-amber-600/45' : 'text-slate-500/65'
                         }`}
                       >
-                        <span
-                          className={`text-[10px] leading-none font-bold ${
-                            isCatBowl ? 'text-amber-600/45' : 'text-slate-500/65'
-                          }`}
-                        >
-                          ↓
-                        </span>
-                      </div>
-                    )}
-                </div>
-              ))}
-            </div>
-          )}
+                        ↓
+                      </span>
+                    </div>
+                  )}
+              </div>
+            ))}
+          </div>
 
-          {/* LIVE MULTI-FRAME WALKING, EATING, SNIFFING & SLEEPING CAT! */}
+          {/* ORIGINAL BELOVED PAINTED STORYBOOK CAT — DISTANCE-DRIVEN 4-FRAME WALK, ZERO RUNNING IN PLACE, ZERO SCALING WOBBLE! */}
           {isCatBowl && catPos && (
             <button
               type="button"
               onClick={() => {
+                stopWalkingMotion();
                 clearRoamTimers();
                 playCatPeekSound(soundEnabled);
                 triggerHaptic(hapticsEnabled, 'light');
-                setCatPhase('happy');
+                setCatState('happy');
                 setShowCatTag(true);
                 window.setTimeout(() => {
-                  setCatPhase((cur) => (cur === 'happy' ? 'idle' : cur));
+                  setCatState((cur) => (cur === 'happy' ? 'idle' : cur));
                   setShowCatTag(false);
                 }, 1500);
               }}
               aria-label={walkerName}
-              className="absolute z-30 w-15 h-15 -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
+              className="absolute z-30 w-16 h-16 -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none flex items-center justify-center"
               style={{
                 left: `${catPos.x}px`,
                 top: `${catPos.y}px`,
-                transitionProperty: 'left, top',
-                transitionDuration: `${catWalkMs}ms`,
-                transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-10 h-2.5 rounded-full bg-amber-950/20 blur-[2px] pointer-events-none" />
+              {/* Soft grounded shadow */}
+              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-10 h-2.5 rounded-full bg-amber-950/18 blur-[2px] pointer-events-none" />
+
               <div
-                className="w-full h-full transition-transform duration-150"
+                className="w-full h-full flex items-center justify-center"
                 style={{
                   transform:
-                    catPhase === 'sleeping'
+                    catState === 'sleeping'
                       ? 'scaleX(1)'
                       : catFacing === 'right'
                       ? 'scaleX(-1)'
@@ -1323,28 +1227,16 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 }}
               >
                 <img
-                  src={catSpriteSrc}
+                  src={activeCatSprite}
                   alt={walkerName}
                   draggable={false}
-                  className={`w-full h-full object-contain drop-shadow-md pointer-events-none ${
-                    catPhase === 'walking' || catPhase === 'roaming'
-                      ? 'animate-cat-trot'
-                      : catPhase === 'eating'
-                      ? 'animate-cat-munch'
-                      : catPhase === 'sniffing'
-                      ? 'animate-cat-sniff'
-                      : catPhase === 'sleeping'
-                      ? 'animate-cat-sleep'
-                      : catPhase === 'happy'
-                      ? 'animate-kitten-joy'
-                      : 'animate-cat-idle'
-                  }`}
+                  className="w-full h-full object-contain drop-shadow-md pointer-events-none"
                 />
               </div>
 
-              {/* Floating dreamy Zzz bubbles while curled up asleep */}
-              {catPhase === 'sleeping' && (
-                <div className="absolute -top-2 right-1 pointer-events-none select-none">
+              {/* Gentle floating Zzz when curled up sleeping */}
+              {catState === 'sleeping' && (
+                <div className="absolute -top-1 right-1 pointer-events-none select-none">
                   <span className="absolute text-[10px] font-extrabold text-indigo-400 animate-zzz">
                     z
                   </span>
@@ -1363,20 +1255,16 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                 </div>
               )}
 
-              {/* Curious sniff sparkle when sniffing */}
-              {catPhase === 'sniffing' && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-white/90 border border-amber-200 text-[8px] font-bold text-amber-700 shadow-xs whitespace-nowrap pointer-events-none">
+              {/* Subtle sniff label */}
+              {catState === 'sniffing' && (
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-white/92 border border-amber-200 text-[8px] font-bold text-amber-800 shadow-xs whitespace-nowrap pointer-events-none">
                   schnupper…
                 </span>
               )}
 
-              {(catPhase === 'eating' || catPhase === 'happy' || showCatTag) && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-white/95 border border-rose-200 text-[9px] font-extrabold text-rose-600 shadow-sm whitespace-nowrap pointer-events-none">
-                  {catPhase === 'eating'
-                    ? `${walkerName} mampft!`
-                    : catPhase === 'happy'
-                    ? `${walkerName} ♥`
-                    : `${walkerName} ♥`}
+              {(catState === 'eating' || catState === 'happy' || showCatTag) && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-white/95 border border-rose-200 text-[9px] font-extrabold text-rose-600 shadow-sm whitespace-nowrap pointer-events-none">
+                  {catState === 'eating' ? `${walkerName} mampft!` : `${walkerName} ♥`}
                 </span>
               )}
             </button>
@@ -1448,7 +1336,7 @@ export const BlisterPack: React.FC<BlisterPackProps> = ({
                     <img
                       src={`/assets/cat-peek-happy-${selectedPill.dayIndex % 4}.png`}
                       alt=""
-                      className="w-11 h-11 rounded-full object-cover border border-rose-100 animate-kitten-joy"
+                      className="w-11 h-11 rounded-full object-cover border border-rose-100"
                     />
                   )}
                 <div>

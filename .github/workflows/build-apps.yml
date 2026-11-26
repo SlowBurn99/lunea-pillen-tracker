@@ -46,13 +46,13 @@ jobs:
       - name: Prepare APK artifact
         run: |
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Pille-v2-Android.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Pille-v3-Android.apk
 
-      - name: Upload Pille-v2-Android.apk
+      - name: Upload Pille-v3-Android.apk
         uses: actions/upload-artifact@v4
         with:
-          name: Pille-v2-Android-APK
-          path: artifacts/Pille-v2-Android.apk
+          name: Pille-v3-Android-APK
+          path: artifacts/Pille-v3-Android.apk
           retention-days: 30
 
   build-ios-unsigned:
@@ -102,13 +102,13 @@ jobs:
           mkdir -p artifacts/Payload
           cp -r ios/App/build/Build/Products/Release-iphoneos/App.app artifacts/Payload/
           cd artifacts
-          zip -qry Pille-v2-iOS-unsigned.ipa Payload
+          zip -qry Pille-v3-iOS-unsigned.ipa Payload
 
-      - name: Upload Pille-v2-iOS-unsigned.ipa
+      - name: Upload Pille-v3-iOS-unsigned.ipa
         uses: actions/upload-artifact@v4
         with:
-          name: Pille-v2-iOS-IPA
-          path: artifacts/Pille-v2-iOS-unsigned.ipa
+          name: Pille-v3-iOS-IPA
+          path: artifacts/Pille-v3-iOS-unsigned.ipa
           retention-days: 30
 
       - name: Publish iOS IPA to GitHub Release
@@ -116,9 +116,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view latest-build >/dev/null 2>&1; then
-            gh release upload latest-build artifacts/Pille-v2-iOS-unsigned.ipa --clobber
+            gh release upload latest-build artifacts/Pille-v3-iOS-unsigned.ipa --clobber
           else
-            gh release create latest-build artifacts/Pille-v2-iOS-unsigned.ipa \
-              --title "Pille v2 Build" \
-              --notes "Pille v2 (Android APK & unsignierte iOS IPA mit Sperrbildschirm-Alarmton & streunender/schlafender Katze)"
+            gh release create latest-build artifacts/Pille-v3-iOS-unsigned.ipa \
+              --title "Pille v3 Build" \
+              --notes "Pille v3 (Android APK & unsignierte iOS IPA mit echten 60fps-Gelenk-Katzenanimationen)"
           fi

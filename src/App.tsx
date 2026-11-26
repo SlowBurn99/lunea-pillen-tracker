@@ -590,6 +590,7 @@ export function App() {
                   settings: { ...prev.settings, ...patch },
                 }))
               }
+              onChangeTheme={handleChangeTheme}
               onOpenCustomizer={() => setCustomizerOpen(true)}
               onStartNewPack={handleStartNewPack}
               onUpdateProfile={(profile) => {
